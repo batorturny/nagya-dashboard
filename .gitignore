@@ -1,0 +1,9 @@
+.env
+.env.local
+.env.production
+!.env.example
+test.png
+test2.png
+generate.log
+node_modules/
+.DS_Store
