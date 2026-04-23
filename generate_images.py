@@ -84,7 +84,8 @@ def call_api(prompt: str) -> bytes:
 
 def generate(p: dict) -> None:
     global done
-    out = IMG_DIR / f"{p['sku']}.png"
+    out = IMG_DIR / f"{p['sku']}.webp"
+    legacy_png = IMG_DIR / f"{p['sku']}.png"
     if out.exists() and out.stat().st_size > MIN_VALID_BYTES:
         with lock:
             done += 1
@@ -92,7 +93,12 @@ def generate(p: dict) -> None:
         return
     try:
         img = call_api(build_prompt(p))
-        out.write_bytes(img)
+        # API returns PNG; convert to WebP for 30x smaller files
+        import io
+        from PIL import Image
+        Image.open(io.BytesIO(img)).convert('RGB').save(out, 'WEBP', quality=82, method=6)
+        if legacy_png.exists():
+            legacy_png.unlink()
         with lock:
             done += 1
             print(f"[{done}/{total}] OK     {p['sku']}  {p['title']}")
