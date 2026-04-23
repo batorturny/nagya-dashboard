@@ -1,6 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
+import { weatherHandler } from './routes/weather';
+import {
+  createCampaignHandler,
+  listCampaignsHandler,
+  previewCampaignHandler,
+} from './routes/campaigns';
+
 type Bindings = {
   ASSETS: Fetcher;
   TAGS: KVNamespace;
@@ -41,7 +48,6 @@ app.get('/api/users', async (c) => {
 });
 
 app.get('/api/products', async (c) => {
-  // Preserve query string so ?category=, ?sort=, ?search= etc. work.
   const upstream = new URL(c.env.NAGYA_API_BASE + '/products');
   for (const [k, v] of new URL(c.req.url).searchParams) upstream.searchParams.set(k, v);
 
@@ -75,32 +81,20 @@ app.put('/api/tags/:sku', async (c) => {
 });
 
 app.post('/api/ai-tag', (c) =>
-  c.json({ status: 'not_implemented', phase: 2, hint: 'Gemini Flash batch tagging — coming in Phase 2' }, 501),
+  c.json(
+    { status: 'not_implemented', phase: 2, hint: 'Gemini Flash batch tagging — coming in Phase 2' },
+    501,
+  ),
 );
 
 // ---------------------------------------------------------------------------
-// Phase 3 — weather + campaigns
+// Phase 3 — weather + campaign composer
 // ---------------------------------------------------------------------------
 
-app.get('/api/weather', (c) =>
-  c.json({ status: 'not_implemented', phase: 3, hint: 'Open-Meteo or AccuWeather proxy — Phase 3' }, 501),
-);
-
-app.get('/api/campaigns', async (c) => {
-  const list = await c.env.CAMPAIGNS.list();
-  const items = await Promise.all(
-    list.keys.map(async (k) => ({ id: k.name, ...(await c.env.CAMPAIGNS.get(k.name, 'json') as object) })),
-  );
-  return c.json({ count: items.length, campaigns: items });
-});
-
-app.post('/api/campaigns', async (c) => {
-  const body = await c.req.json();
-  const id = crypto.randomUUID();
-  const record = { ...body, id, created_at: new Date().toISOString() };
-  await c.env.CAMPAIGNS.put(id, JSON.stringify(record));
-  return c.json(record, 201);
-});
+app.get('/api/weather', weatherHandler);
+app.get('/api/campaigns', listCampaignsHandler);
+app.post('/api/campaigns', createCampaignHandler);
+app.post('/api/campaigns/preview', previewCampaignHandler);
 
 // ---------------------------------------------------------------------------
 // Phase 4 — send via Resend
@@ -111,7 +105,7 @@ app.post('/api/send', (c) =>
 );
 
 // ---------------------------------------------------------------------------
-// Fallback: static assets
+// Fallback: static assets (React SPA)
 // ---------------------------------------------------------------------------
 
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
