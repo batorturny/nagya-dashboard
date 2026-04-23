@@ -62,6 +62,11 @@ export function Compose() {
   const [removedSkus, setRemovedSkus] = useState<Set<string>>(new Set());
   const [savedId, setSavedId] = useState<string | null>(null);
 
+  type SendStatus = { userId: number; name: string; email: string; status: 'sent' | 'failed'; error?: string };
+  const [sending, setSending] = useState(false);
+  const [sendResults, setSendResults] = useState<SendStatus[] | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   // -------------------------------------------------------------------------
   // Initial load: products + users + tags + weather in parallel
   // -------------------------------------------------------------------------
@@ -156,6 +161,37 @@ export function Compose() {
       return { user, items: ranked };
     });
   }, [users, selectedProducts, tags, weatherSnap, campaignType]);
+
+  // -------------------------------------------------------------------------
+  // Send handler
+  // -------------------------------------------------------------------------
+  async function handleSend() {
+    if (!users || selectedProducts.length === 0) return;
+    setSending(true);
+    setSendResults(null);
+    try {
+      const body = {
+        products: selectedProducts,
+        users,
+        perUser: perUser.map((pu) => ({
+          userId: pu.user.id,
+          skus: pu.items.map((i) => i.product.sku),
+        })),
+      };
+      const res = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { sent: number; total: number; results: SendStatus[] };
+      setSendResults(data.results);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setSending(false);
+      setConfirmOpen(false);
+    }
+  }
 
   // -------------------------------------------------------------------------
   // Save handler
@@ -500,18 +536,79 @@ export function Compose() {
       </section>
 
       {/* Actions */}
-      <section className="flex items-center gap-3 border-t border-border pt-6">
-        <Button onClick={handleSave} disabled={selectedProducts.length === 0}>
-          <Save /> Mentés kampányként
-        </Button>
-        <Button variant="outline" disabled>
-          <Send /> Email küldés (Phase 4)
-        </Button>
-        {savedId && (
-          <div className="flex items-center gap-1.5 text-sm text-success">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span className="text-emerald-500">Mentve: </span>
-            <span className="font-mono text-xs text-muted-foreground">{savedId}</span>
+      <section className="space-y-4 border-t border-border pt-6">
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSave} disabled={selectedProducts.length === 0}>
+            <Save /> Mentés kampányként
+          </Button>
+
+          {!confirmOpen ? (
+            <Button
+              variant="default"
+              className="bg-[#E2450C] hover:bg-[#c93a09] text-white"
+              disabled={selectedProducts.length === 0 || sending}
+              onClick={() => setConfirmOpen(true)}
+            >
+              <Send /> Email küldés
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {users?.length ?? 0} felhasználónak küldjük ki. Biztos?
+              </span>
+              <Button
+                size="sm"
+                className="bg-[#E2450C] hover:bg-[#c93a09] text-white"
+                onClick={handleSend}
+                disabled={sending}
+              >
+                {sending ? 'Küldés…' : 'Igen, küld!'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmOpen(false)} disabled={sending}>
+                Mégse
+              </Button>
+            </div>
+          )}
+
+          {savedId && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <span className="text-emerald-500">Mentve: </span>
+              <span className="font-mono text-xs text-muted-foreground">{savedId}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Send results */}
+        {sendResults && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">
+              Küldési eredmény: {sendResults.filter((r) => r.status === 'sent').length}/{sendResults.length} sikeres
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {sendResults.map((r) => (
+                <div
+                  key={r.userId}
+                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm border ${
+                    r.status === 'sent'
+                      ? 'bg-emerald-50 border-emerald-200'
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
+                  {r.status === 'sent' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{r.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {r.status === 'sent' ? r.email : r.error ?? 'hiba'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>

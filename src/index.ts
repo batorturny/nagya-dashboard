@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 
 import { weatherHandler } from './routes/weather';
 import { aiTagHandler } from './routes/ai-tag';
+import { sendHandler } from './routes/send';
 import {
   createCampaignHandler,
   listCampaignsHandler,
@@ -96,9 +97,7 @@ app.post('/api/campaigns/preview', previewCampaignHandler);
 // Phase 4 — send via Resend
 // ---------------------------------------------------------------------------
 
-app.post('/api/send', (c) =>
-  c.json({ status: 'not_implemented', phase: 4, hint: 'Resend integration — Phase 4' }, 501),
-);
+app.post('/api/send', sendHandler);
 
 // ---------------------------------------------------------------------------
 // Fallback: static assets (React SPA)
