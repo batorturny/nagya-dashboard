@@ -2,20 +2,39 @@
   "name": "nagya-dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Smart newsletter platform for nagya.app — weather-aware, personalized product promos with Resend delivery and PDF coupons.",
+  "type": "module",
+  "description": "Smart newsletter platform for nagya.app — React + shadcn/ui on a Cloudflare Worker.",
   "scripts": {
-    "dev": "npm run build && wrangler dev",
-    "build": "bash build.sh",
+    "dev:ui": "vite",
+    "dev": "npm run build:ui && wrangler dev",
+    "build:ui": "vite build",
+    "build": "npm run build:ui && bash build.sh",
     "deploy": "npm run build && wrangler deploy",
-    "kv:create": "wrangler kv namespace create TAGS && wrangler kv namespace create CAMPAIGNS",
-    "types": "wrangler types"
+    "typecheck": "tsc -b",
+    "kv:create": "wrangler kv namespace create TAGS && wrangler kv namespace create CAMPAIGNS"
   },
   "dependencies": {
-    "hono": "^4.6.10"
+    "@radix-ui/react-slot": "^1.1.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "hono": "^4.6.10",
+    "lucide-react": "^0.454.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241106.0",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
+    "vite": "^5.4.11",
     "wrangler": "^3.87.0"
   }
 }
