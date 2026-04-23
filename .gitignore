@@ -7,3 +7,13 @@ test2.png
 generate.log
 node_modules/
 .DS_Store
+
+# local dev / build artifacts
+.wrangler/
+deploy/
+public/
+dist/
+
+# transcription intermediates (keep transcript.txt, skip large binaries)
+docs/trans/*.m4a
+docs/trans/*.mp3
