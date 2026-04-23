@@ -57,7 +57,14 @@
 
   .ribbon { background: var(--aldi-yellow); color: var(--aldi-blue); padding: 2.5mm 10mm; font-weight: 800; font-size: 3mm; letter-spacing: 0.06em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
 
-  .grid { padding: 4mm 6mm; display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; gap: 3mm; flex: 1; }
+  .grid {
+    padding: 4mm 6mm;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: minmax(44mm, auto);
+    gap: 3mm;
+    align-content: start;
+  }
 
   .coupon {
     border: 0.4mm dashed #8a8a8a;
@@ -70,6 +77,7 @@
     position: relative;
     break-inside: avoid;
     page-break-inside: avoid;
+    min-height: 44mm;
   }
   .coupon .img { width: 22mm; height: 22mm; background: var(--aldi-light); border-radius: 1mm; overflow: hidden; display: flex; align-items: center; justify-content: center; }
   .coupon .img img { width: 100%; height: 100%; object-fit: cover; }
@@ -83,14 +91,55 @@
   .coupon .bottom { margin-top: auto; padding-top: 1.5mm; border-top: 0.25mm dashed #c0c0c0; display: flex; align-items: flex-end; justify-content: space-between; gap: 2mm; }
   .coupon .code-wrap svg { display: block; }
   .coupon .code-wrap .code { font-family: "Courier New", monospace; font-size: 2.1mm; letter-spacing: 0.04em; font-weight: 700; margin-top: 0.3mm; }
-  .coupon .valid { font-size: 2mm; color: var(--muted); text-align: right; line-height: 1.2; white-space: nowrap; }
+  .coupon .valid { font-size: 2mm; color: var(--muted); text-align: right; line-height: 1.2; white-space: normal; max-width: 20mm; flex-shrink: 0; overflow: hidden; }
   .coupon .valid strong { color: var(--aldi-dark); font-size: 2.4mm; display: block; }
 
   .page-footer { padding: 2.5mm 10mm; display: flex; justify-content: space-between; align-items: center; font-size: 2.4mm; color: var(--muted); background: var(--aldi-light); border-top: 0.3mm solid #ddd; }
   .page-footer .pnum { background: var(--aldi-blue); color: #fff; padding: 0.8mm 2.5mm; border-radius: 1mm; font-weight: 700; font-size: 2.4mm; }
+
+  /* Screen-only print toolbar */
+  .print-toolbar {
+    position: fixed;
+    top: 16px; right: 16px;
+    display: flex; gap: 8px;
+    z-index: 100;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  }
+  .print-toolbar button {
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: transform 0.1s;
+  }
+  .print-toolbar button:hover { transform: translateY(-1px); }
+  .print-toolbar .print-btn { background: var(--aldi-red); color: #fff; }
+  .print-toolbar .back-btn { background: #fff; color: var(--aldi-dark); border: 1px solid #ccc; }
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,0.92);
+    display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #555; font-size: 14px;
+    z-index: 200;
+  }
+  @media print {
+    .print-toolbar, .loading-overlay { display: none !important; }
+    body { background: #fff; }
+  }
 </style>
 </head>
 <body>
+
+<div class="print-toolbar" id="print-toolbar" style="display:none;">
+  <button class="back-btn" type="button" onclick="window.history.length>1?history.back():window.close()">↩ Vissza</button>
+  <button class="print-btn" type="button" id="download-pdf-btn">⬇ PDF letöltés</button>
+</div>
+
+<div id="loading" class="loading-overlay">Személyre szabott kuponok betöltése…</div>
 
 <div class="page">
 
@@ -240,84 +289,212 @@
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script>
   const HUF = new Intl.NumberFormat('hu-HU');
   const cfg = window.__BOOKLET_CONFIG__;
 
-  // Derive computed fields
-  cfg.coupons = cfg.coupons.slice(0, 10).map(c => {
-    const discount = c.discount ?? Math.round((1 - c.newPrice / c.oldPrice) * 100);
-    return {
-      ...c,
-      discount,
-      imageUrl: c.imageUrl || `images/${c.sku}.webp`,
-      discountBadge: `-${discount}%`,
-      oldPriceLabel: HUF.format(c.oldPrice) + ' Ft',
-      newPriceLabel: HUF.format(c.newPrice) + ' Ft',
-      validToLabel: c.validTo,
-    };
-  });
-
-  // Global text placeholders
-  const globals = {
-    subtitle: cfg.subtitle,
-    headline: cfg.headline,
-    userLine: cfg.userName ? (cfg.userGreeting + cfg.userName) : '',
-    avgDiscountLine: `-${cfg.avgDiscount}%`,
-    avgDiscountLabel: cfg.avgDiscountLabel,
-    validPeriod: `${cfg.validFrom}\n— ${cfg.validTo}`,
-    ribbonLeft: cfg.ribbonLeft,
-    ribbonRight: cfg.ribbonRight,
-    issueLabel: cfg.issueLabel,
-    footerNote: cfg.footerNote,
-    pageIndicator: cfg.pageIndicator,
-  };
-
-  // Logo
-  document.getElementById('logo-img').src = cfg.brand.logoUrl || window.__DEFAULT_LOGO__;
-
-  // Fill globals
-  document.querySelectorAll('[data-var]').forEach(el => {
-    const key = el.dataset.var;
-    if (key in globals) {
-      // Newline-preserving for period
-      el.innerHTML = String(globals[key]).replace(/\n/g, '<br>');
-      if (!globals[key]) el.style.display = 'none';
+  // Personalisation: /coupon-booklet.html?c=<campaignId>&u=<userId>
+  // If present, fetch /api/coupon/:cid/:uid and override the booklet config with
+  // the user-specific items. Falls back to hardcoded sample on error or when absent.
+  async function loadPersonalised() {
+    const params = new URLSearchParams(location.search);
+    const cid = params.get('c');
+    const uid = params.get('u');
+    if (!cid || !uid) return null;
+    try {
+      const res = await fetch('/api/coupon/' + cid + '/' + uid);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data;
+    } catch {
+      return null;
     }
-  });
+  }
 
-  // Render coupons from template
-  const tpl = document.getElementById('coupon-tpl');
-  const grid = document.getElementById('grid');
-  cfg.coupons.forEach(c => {
-    const node = tpl.content.cloneNode(true);
-    node.querySelectorAll('[data-var]').forEach(el => {
-      const key = el.dataset.var;
-      if (key in c) el.textContent = c[key];
+  function formatDate(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${y}.${m}.${d}`;
+  }
+  function shortDate(iso) {
+    const [, m, d] = iso.split('-');
+    return `${m}.${d}`;
+  }
+
+  function applyPersonalised(data) {
+    // Override coupons with personalised items
+    cfg.coupons = data.items.map(it => ({
+      sku: it.sku,
+      title: it.title,
+      category: it.category,
+      imageUrl: it.imageUrl,
+      oldPrice: it.originalPrice,
+      newPrice: it.finalPrice,
+      discount: it.discountPct,
+      code: it.code,
+      validTo: shortDate(data.validUntil) + '-ig',
+      limit: 'Max. 1 db',
+    }));
+    // Override header text with user context
+    const firstName = data.user.name.split(' ').slice(-1)[0] || data.user.name;
+    cfg.userName = data.user.name;
+    cfg.headline = `${firstName}, a személyes kuponjaid`;
+    cfg.subtitle = `ALDI · ${data.label}`;
+    cfg.validFrom = formatDate(new Date().toISOString().slice(0, 10));
+    cfg.validTo = formatDate(data.validUntil);
+    const avg = Math.round(
+      data.items.reduce((s, i) => s + i.discountPct, 0) / Math.max(1, data.items.length),
+    );
+    cfg.avgDiscount = avg;
+    cfg.ribbonLeft = `★ ${data.items.length} személyes kupon ★`;
+    cfg.issueLabel = `ALDI · Személyes kuponfüzet · ${data.user.email}`;
+    cfg.pageIndicator = '1 / 1';
+  }
+
+  (async () => {
+    const personalised = await loadPersonalised();
+    if (personalised) applyPersonalised(personalised);
+
+    // Derive computed fields
+    cfg.coupons = cfg.coupons.slice(0, 10).map(c => {
+      const discount = c.discount ?? Math.round((1 - c.newPrice / c.oldPrice) * 100);
+      return {
+        ...c,
+        discount,
+        imageUrl: c.imageUrl || `images/${c.sku}.webp`,
+        discountBadge: `-${discount}%`,
+        oldPriceLabel: HUF.format(c.oldPrice) + ' Ft',
+        newPriceLabel: HUF.format(c.newPrice) + ' Ft',
+        validToLabel: c.validTo,
+      };
     });
-    node.querySelectorAll('[data-var-attr]').forEach(el => {
-      el.dataset.varAttr.split(';').forEach(pair => {
-        const [attr, key] = pair.split(':');
-        if (c[key] !== undefined) el.setAttribute(attr, c[key]);
+
+    // Global text placeholders
+    const globals = {
+      subtitle: cfg.subtitle,
+      headline: cfg.headline,
+      userLine: cfg.userName ? (cfg.userGreeting + cfg.userName) : '',
+      avgDiscountLine: `-${cfg.avgDiscount}%`,
+      avgDiscountLabel: cfg.avgDiscountLabel,
+      validPeriod: `${cfg.validFrom}\n— ${cfg.validTo}`,
+      ribbonLeft: cfg.ribbonLeft,
+      ribbonRight: cfg.ribbonRight,
+      issueLabel: cfg.issueLabel,
+      footerNote: cfg.footerNote,
+      pageIndicator: cfg.pageIndicator,
+    };
+
+    // Logo
+    document.getElementById('logo-img').src = cfg.brand.logoUrl || window.__DEFAULT_LOGO__;
+
+    // Fill globals
+    document.querySelectorAll('[data-var]').forEach(el => {
+      const key = el.dataset.var;
+      if (key in globals) {
+        el.innerHTML = String(globals[key]).replace(/\n/g, '<br>');
+        if (!globals[key]) el.style.display = 'none';
+      }
+    });
+
+    // Render coupons from template
+    const tpl = document.getElementById('coupon-tpl');
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    cfg.coupons.forEach(c => {
+      const node = tpl.content.cloneNode(true);
+      node.querySelectorAll('[data-var]').forEach(el => {
+        const key = el.dataset.var;
+        if (key in c) el.textContent = c[key];
+      });
+      node.querySelectorAll('[data-var-attr]').forEach(el => {
+        el.dataset.varAttr.split(';').forEach(pair => {
+          const [attr, key] = pair.split(':');
+          if (c[key] !== undefined) el.setAttribute(attr, c[key]);
+        });
+      });
+      grid.appendChild(node);
+    });
+
+    // Render Code128 barcodes
+    document.querySelectorAll('svg.bc').forEach(svg => {
+      JsBarcode(svg, svg.getAttribute('data-code'), {
+        format: 'CODE128',
+        width: 0.9,
+        height: 22,
+        displayValue: false,
+        margin: 0,
+        background: 'transparent',
+        lineColor: '#000',
       });
     });
-    grid.appendChild(node);
-  });
 
-  // Render Code128 barcodes
-  document.querySelectorAll('svg.bc').forEach(svg => {
-    JsBarcode(svg, svg.getAttribute('data-code'), {
-      format: 'CODE128',
-      width: 0.9,
-      height: 22,
-      displayValue: false,
-      margin: 0,
-      background: 'transparent',
-      lineColor: '#000',
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('print-toolbar').style.display = 'flex';
+
+    // Shared PDF-download action (used by the button and the auto-download URL param).
+    async function generatePdf() {
+      const page = document.querySelector('.page');
+      const canvas = await html2canvas(page, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageW, pageH);
+      const safeName = (cfg.userName || 'aldi-kupon').replace(/[^a-z0-9áéíóöőúüű]/gi, '_');
+      pdf.save(`aldi-kupon-${safeName}.pdf`);
+    }
+
+    const btn = document.getElementById('download-pdf-btn');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = 'PDF generálás…';
+      try {
+        await generatePdf();
+      } catch (err) {
+        console.error('PDF generation failed', err);
+        alert('PDF készítés sikertelen: ' + (err?.message || err));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
     });
-  });
 
-  window.__ready = true;
+    // If the URL asks for auto-download (email CTA links do), fire immediately
+    // after images decode so the user lands straight on the download dialog.
+    const autoDownload = new URLSearchParams(location.search).get('download') === 'auto';
+    if (autoDownload) {
+      // Replace toolbar text while PDF generates
+      btn.textContent = 'PDF generálás…';
+      btn.disabled = true;
+      // Give the browser a tick to paint images and barcodes
+      await new Promise((r) => setTimeout(r, 400));
+      await Promise.all(
+        Array.from(document.images).map(
+          (img) => img.complete ? Promise.resolve() : new Promise((ok) => {
+            img.addEventListener('load', ok, { once: true });
+            img.addEventListener('error', ok, { once: true });
+          }),
+        ),
+      );
+      try {
+        await generatePdf();
+      } catch (err) {
+        console.error('auto PDF failed', err);
+      }
+      btn.textContent = '⬇ PDF letöltés';
+      btn.disabled = false;
+    }
+
+    window.__ready = true;
+  })();
 </script>
 </body>
 </html>

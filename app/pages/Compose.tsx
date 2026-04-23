@@ -62,6 +62,13 @@ export function Compose() {
   const [removedSkus, setRemovedSkus] = useState<Set<string>>(new Set());
   const [savedId, setSavedId] = useState<string | null>(null);
 
+  // Send flow
+  const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
+  const [sendCampaignId, setSendCampaignId] = useState<string | null>(null);
+  const [sendDryRun, setSendDryRun] = useState<boolean>(false);
+
   // -------------------------------------------------------------------------
   // Initial load: products + users + tags + weather in parallel
   // -------------------------------------------------------------------------
@@ -137,9 +144,19 @@ export function Compose() {
   // Per-user personalization preview
   // -------------------------------------------------------------------------
   const perUser = useMemo(() => {
-    if (!users) return [];
+    if (!users || !products) return [];
     return users.map((user) => {
-      const ranked = selectedProducts
+      // Same favorite-category boost as the send route: always surface a few
+      // items from the user's preferred category, even if the admin's pick
+      // didn't include any.
+      const selectedSkus = new Set(selectedProducts.map((p) => p.sku));
+      const favCatBoost = products
+        .filter((p) => p.category === user.favorite_category)
+        .filter((p) => !selectedSkus.has(p.sku))
+        .slice(0, 3);
+      const pool = [...selectedProducts, ...favCatBoost];
+
+      const ranked = pool
         .map((product) => ({
           product,
           breakdown: scoreFor({
@@ -152,10 +169,10 @@ export function Compose() {
         }))
         .filter((x) => x.breakdown.total > 0)
         .sort((a, b) => b.breakdown.total - a.breakdown.total)
-        .slice(0, Math.min(3, selectedProducts.length));
+        .slice(0, Math.min(productCount, pool.length));
       return { user, items: ranked };
     });
-  }, [users, selectedProducts, tags, weatherSnap, campaignType]);
+  }, [users, products, selectedProducts, tags, weatherSnap, campaignType, productCount]);
 
   // -------------------------------------------------------------------------
   // Save handler
@@ -181,6 +198,38 @@ export function Compose() {
       setSavedId(saved.id);
     } catch (e) {
       setLoadError((e as Error).message);
+    }
+  }
+
+  async function handleSend(dryRun: boolean) {
+    setSending(true);
+    setSendResults(null);
+    setSendCampaignId(null);
+    setSendDryRun(dryRun);
+    try {
+      const res = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: campaignType,
+          productSkus: selectedProducts.map((p) => p.sku),
+          perUserLimit: productCount,
+          weather: weatherSnap,
+          dryRun,
+        }),
+      });
+      if (!res.ok) throw new Error(`send failed: ${res.status}`);
+      const data = (await res.json()) as {
+        campaignId: string;
+        results: SendResult[];
+      };
+      setSendCampaignId(data.campaignId);
+      setSendResults(data.results);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setSending(false);
+      setSendConfirmOpen(false);
     }
   }
 
@@ -500,23 +549,140 @@ export function Compose() {
       </section>
 
       {/* Actions */}
-      <section className="flex items-center gap-3 border-t border-border pt-6">
+      <section className="flex flex-wrap items-center gap-3 border-t border-border pt-6">
         <Button onClick={handleSave} disabled={selectedProducts.length === 0}>
           <Save /> Mentés kampányként
         </Button>
-        <Button variant="outline" disabled>
-          <Send /> Email küldés (Phase 4)
+        <Button
+          variant="outline"
+          onClick={() => handleSend(true)}
+          disabled={selectedProducts.length === 0 || sending}
+        >
+          <Sparkles /> Dry-run (nem küld)
+        </Button>
+        <Button
+          onClick={() => setSendConfirmOpen(true)}
+          disabled={selectedProducts.length === 0 || sending}
+          className="bg-[#E2450C] hover:bg-[#c93c0a]"
+        >
+          <Send /> Email kiküldése {perUser.length} usernek
         </Button>
         {savedId && (
-          <div className="flex items-center gap-1.5 text-sm text-success">
+          <div className="flex items-center gap-1.5 text-sm">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="text-emerald-500">Mentve: </span>
             <span className="font-mono text-xs text-muted-foreground">{savedId}</span>
           </div>
         )}
       </section>
+
+      {sendConfirmOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSendConfirmOpen(false);
+          }}
+        >
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-[#E2450C]" />
+                Biztos, hogy kiküldöd?
+              </CardTitle>
+              <CardDescription>
+                {perUser.length} email megy ki a következőknek:{' '}
+                <span className="font-mono text-xs">
+                  {perUser.map((pu) => pu.user.email).join(', ')}
+                </span>
+                . Minden user személyre szabott vonalkódos PDF kupont kap.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-end gap-2 pt-0">
+              <Button variant="outline" onClick={() => setSendConfirmOpen(false)} disabled={sending}>
+                Mégse
+              </Button>
+              <Button
+                onClick={() => handleSend(false)}
+                disabled={sending}
+                className="bg-[#E2450C] hover:bg-[#c93c0a]"
+              >
+                {sending ? (
+                  <><CircleDashed className="animate-spin" /> Küldés…</>
+                ) : (
+                  <><Send /> Küldés most</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {sendResults && (
+        <section className="space-y-3 border-t border-border pt-6">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Send className="h-4 w-4" />
+            Küldés eredménye {sendDryRun ? '(dry-run)' : ''}
+          </h2>
+          {sendCampaignId && (
+            <p className="text-xs text-muted-foreground font-mono">
+              Kampány ID: {sendCampaignId}
+            </p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {sendResults.map((r) => (
+              <Card
+                key={r.userId}
+                className={
+                  r.status === 'sent'
+                    ? 'border-emerald-500/40'
+                    : r.status === 'skipped'
+                    ? 'border-amber-500/40'
+                    : 'border-destructive/40'
+                }
+              >
+                <CardContent className="p-3 text-xs flex items-center gap-3">
+                  {r.status === 'sent' ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+                  ) : r.status === 'skipped' ? (
+                    <CircleDashed className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{r.email}</div>
+                    <div className="text-muted-foreground text-[10px]">
+                      {r.itemCount} kupon ·{' '}
+                      <a
+                        href={r.couponUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline hover:text-[#E2450C]"
+                      >
+                        kupon link
+                      </a>
+                      {r.error && <span className="text-destructive"> · {r.error}</span>}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
+}
+
+interface SendResult {
+  userId: number;
+  email: string;
+  status: 'sent' | 'failed' | 'skipped';
+  resendId?: string;
+  error?: string;
+  couponUrl: string;
+  itemCount: number;
 }
 
 export type { CampaignType };

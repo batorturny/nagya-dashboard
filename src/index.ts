@@ -8,6 +8,11 @@ import {
   listCampaignsHandler,
   previewCampaignHandler,
 } from './routes/campaigns';
+import {
+  sendCampaignHandler,
+  getCouponHandler,
+  getEmailPreviewHandler,
+} from './routes/send';
 
 type Bindings = {
   ASSETS: Fetcher;
@@ -96,9 +101,9 @@ app.post('/api/campaigns/preview', previewCampaignHandler);
 // Phase 4 — send via Resend
 // ---------------------------------------------------------------------------
 
-app.post('/api/send', (c) =>
-  c.json({ status: 'not_implemented', phase: 4, hint: 'Resend integration — Phase 4' }, 501),
-);
+app.post('/api/send', sendCampaignHandler);
+app.get('/api/coupon/:campaignId/:userId', getCouponHandler);
+app.get('/api/email-preview/:campaignId/:userId', getEmailPreviewHandler);
 
 // ---------------------------------------------------------------------------
 // Fallback: static assets (React SPA)

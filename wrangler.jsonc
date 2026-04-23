@@ -11,10 +11,18 @@
     "not_found_handling": "single-page-application"
   },
 
+  "dev": {
+    "port": 3005
+  },
+
   "vars": {
     "NAGYA_API_BASE": "https://api.nagya.app",
-    "SENDER_EMAIL": "noreply@bildr.hu",
-    "SENDER_NAME": "nagya.app ajanlatok",
+    "SENDER_EMAIL": "onboarding@resend.dev",
+    "SENDER_NAME": "ALDI ajanlatok",
+    // Resend test-mode override: with an unverified domain, emails can only be
+    // delivered to the Resend account owner's address. When set, the send route
+    // routes every email to this address instead of the real user email.
+    "TEST_INBOX": "bator.turny@gmail.com",
     "OPENROUTER_MODEL": "google/gemini-2.0-flash-001",
     "WEATHER_LAT": "47.4979",
     "WEATHER_LON": "19.0402"

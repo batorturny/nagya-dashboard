@@ -24,5 +24,9 @@ fi
 # Data snapshots — used by the React app as offline fallback
 cp products.json users.json public/ 2>/dev/null || true
 
+# Coupon booklet (print-to-PDF target linked from the emails)
+cp coupon-booklet.html public/ 2>/dev/null || true
+cp aldi-logo.png Aldi-logo.jpg public/ 2>/dev/null || true
+
 file_count=$(find public -type f | wc -l | tr -d ' ')
 echo "Built public/ with ${file_count} files."
