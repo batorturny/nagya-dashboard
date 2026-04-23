@@ -19,10 +19,7 @@ const WHEAT_SECONDARY = '#5c3a0a'; // warm dark brown
 function charSpans(text: string, idPrefix: string): string {
   return text
     .split('')
-    .map((char, i) => {
-      const content = char === ' ' ? '&nbsp;' : char;
-      return `<span id="${idPrefix}${i}" class="tw-char">${content}</span>`;
-    })
+    .map((char, i) => `<span id="${idPrefix}${i}" class="tw-char">${char === ' ' ? ' ' : char}</span>`)
     .join('');
 }
 
@@ -62,14 +59,14 @@ export async function buildHyperframesComposition(
   } catch { /* no logo, render text-only outro */ }
 
   const n = imagePaths.length;
-  const taglineText = (tagline ?? 'BUNDLE DEAL:').toUpperCase();
-  const productText = products.map((p) => p.toUpperCase()).join(' + ');
+  const kickerText = `${n}-ITEM BUNDLE`;
+  const sloganText = (tagline ?? 'BUNDLE DEAL').toUpperCase();
 
   // --- Timing ---
   const taglineStart = 0.15;
-  const taglineDuration = taglineText.length * TAGLINE_CHAR_DELAY;
+  const taglineDuration = kickerText.length * TAGLINE_CHAR_DELAY;
   const productNameStart = taglineStart + taglineDuration + 0.2;
-  const productNameDuration = productText.length * PRODUCT_CHAR_DELAY;
+  const productNameDuration = sloganText.length * PRODUCT_CHAR_DELAY;
   const typewriterEndTime = productNameStart + productNameDuration;
   const headlineFadeStart = typewriterEndTime + 0.4;
   const headlineTotalDuration = headlineFadeStart + 0.4;
@@ -179,10 +176,10 @@ ${badgeEl}
   }
 
   // --- Typewriter ---
-  const taglineHtml = charSpans(taglineText, 'tg');
-  const productHtml = charSpans(productText, 'pn');
-  const twTagline = typewriterTweens(taglineText, 'tg', taglineStart, TAGLINE_CHAR_DELAY);
-  const twProduct = typewriterTweens(productText, 'pn', productNameStart, PRODUCT_CHAR_DELAY);
+  const taglineHtml = charSpans(kickerText, 'tg');
+  const productHtml = charSpans(sloganText, 'pn');
+  const twTagline = typewriterTweens(kickerText, 'tg', taglineStart, TAGLINE_CHAR_DELAY);
+  const twProduct = typewriterTweens(sloganText, 'pn', productNameStart, PRODUCT_CHAR_DELAY);
 
   // Track indices: images 1..n, promos n+1..2n, intro 2n+1, outro 2n+2
   const introTrackIndex = 2 * n + 1;
@@ -254,16 +251,16 @@ ${logoEl}
       background: ${WHEAT_BG};
       display: flex; align-items: center; justify-content: center;
     }
-    .intro-inner { text-align: center; padding: 0 52px; }
+    .intro-inner { text-align: center; padding: 48px 60px; }
     #tagline-row {
-      font-size: 16px; font-weight: 800;
-      letter-spacing: 0.3em; color: ${WHEAT_SECONDARY};
-      text-transform: uppercase; margin-bottom: 20px;
+      font-size: 14px; font-weight: 800;
+      letter-spacing: 0.35em; color: ${WHEAT_SECONDARY};
+      text-transform: uppercase; margin-bottom: 24px;
     }
     #product-row {
-      font-size: 54px; font-weight: 900;
-      letter-spacing: 0.04em; color: ${WHEAT_PRIMARY};
-      line-height: 1.1;
+      font-size: 40px; font-weight: 900;
+      letter-spacing: 0.03em; color: ${WHEAT_PRIMARY};
+      line-height: 1.15; word-break: break-word;
     }
     .tw-char { opacity: 0; }
     /* ── Per-item promo ────────────────────────── */
