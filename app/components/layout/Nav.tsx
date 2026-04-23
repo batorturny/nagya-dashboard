@@ -1,44 +1,57 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Mailbox, PenLine } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
 import { WeatherBadge } from '@/components/layout/WeatherBadge';
+import aldiLogo from '@/assets/aldi-it-logo.png';
 
 const links = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/compose', label: 'Compose', icon: PenLine },
-  { to: '/campaigns', label: 'Campaigns', icon: Mailbox },
+  { to: '/', label: 'Termékek' },
+  { to: '/compose', label: 'Hírlevél összeállítása' },
+  { to: '/campaigns', label: 'Korábbi kampányok' },
 ] as const;
 
 export function Nav() {
   return (
-    <nav className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-20">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold tracking-tight">nagya.app</span>
-          <ul className="flex items-center gap-1">
-            {links.map((l) => (
-              <li key={l.to}>
-                <NavLink
-                  to={l.to}
-                  end={l.to === '/'}
-                  className={({ isActive }) =>
-                    cn(
-                      'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                    )
-                  }
-                >
-                  <l.icon className="h-4 w-4" />
-                  {l.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+    <nav className="sticky top-0 z-20">
+      {/* ALDI blue top bar */}
+      <div className="bg-[#003865] text-white">
+        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <img src={aldiLogo} alt="ALDI" className="h-9 w-9 rounded object-cover" />
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/60 font-medium leading-none">
+                ALDI International IT Services
+              </div>
+              <div className="text-sm font-bold leading-tight">
+                Promóciós hírlevél
+              </div>
+            </div>
+          </div>
+          <WeatherBadge />
         </div>
-        <WeatherBadge />
+      </div>
+
+      {/* Orange accent */}
+      <div className="h-[3px] bg-[#E2450C]" />
+
+      {/* Nav links */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 flex items-center gap-0">
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === '/'}
+              className={({ isActive }) =>
+                'px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ' +
+                (isActive
+                  ? 'border-[#E2450C] text-[#003865]'
+                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300')
+              }
+            >
+              {l.label}
+            </NavLink>
+          ))}
+        </div>
       </div>
     </nav>
   );
