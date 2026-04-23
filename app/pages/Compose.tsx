@@ -65,6 +65,7 @@ export function Compose() {
   type SendStatus = { userId: number; name: string; email: string; status: 'sent' | 'failed'; error?: string };
   const [sending, setSending] = useState(false);
   const [sendResults, setSendResults] = useState<SendStatus[] | null>(null);
+  const [sendDemo, setSendDemo] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // -------------------------------------------------------------------------
@@ -183,8 +184,9 @@ export function Compose() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { sent: number; total: number; results: SendStatus[] };
+      const data = (await res.json()) as { sent: number; total: number; results: SendStatus[]; demo?: boolean };
       setSendResults(data.results);
+      setSendDemo(data.demo ?? false);
     } catch (e) {
       setLoadError((e as Error).message);
     } finally {
@@ -582,8 +584,15 @@ export function Compose() {
         {/* Send results */}
         {sendResults && (
           <div className="space-y-2">
-            <div className="text-sm font-medium">
-              Küldési eredmény: {sendResults.filter((r) => r.status === 'sent').length}/{sendResults.length} sikeres
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">
+                Küldési eredmény: {sendResults.filter((r) => r.status === 'sent').length}/{sendResults.length} sikeres
+              </span>
+              {sendDemo && (
+                <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 rounded px-2 py-0.5 font-medium">
+                  DEMO — valódi küldés RESEND_API_KEY-jel
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {sendResults.map((r) => (

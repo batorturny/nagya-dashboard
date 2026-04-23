@@ -200,9 +200,7 @@ function buildEmailHtml(user: User, products: Product[]): string {
 // ---------------------------------------------------------------------------
 
 export async function sendHandler(c: Context<{ Bindings: Bindings }>) {
-  if (!c.env.RESEND_API_KEY) {
-    return c.json({ error: 'RESEND_API_KEY secret not configured' }, 503);
-  }
+  const demoMode = !c.env.RESEND_API_KEY;
 
   const body = await c.req.json<SendBody>();
 
@@ -252,6 +250,10 @@ export async function sendHandler(c: Context<{ Bindings: Bindings }>) {
       const html = buildEmailHtml(user, userProducts);
       const firstName = user.name.split(' ').pop() ?? user.name;
 
+      if (demoMode) {
+        return { userId: user.id, name: user.name, email: user.email, status: 'sent' as const };
+      }
+
       try {
         const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -280,5 +282,5 @@ export async function sendHandler(c: Context<{ Bindings: Bindings }>) {
   );
 
   const sent = results.filter((r) => r.status === 'sent').length;
-  return c.json({ sent, total: results.length, results });
+  return c.json({ sent, total: results.length, results, demo: demoMode });
 }
