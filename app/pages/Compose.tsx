@@ -28,6 +28,7 @@ import {
   type ProductTags,
   type User,
   type WeatherSnapshot,
+  createBundles,
   detectConflicts,
   rankProductsForCampaign,
   scoreFor,
@@ -119,6 +120,17 @@ export function Compose() {
   const conflicts = useMemo(
     () => detectConflicts(selectedProducts, tags),
     [selectedProducts, tags],
+  );
+
+  const bundles = useMemo(
+    () =>
+      createBundles({
+        products: selectedProducts,
+        tags,
+        weather: weatherSnap,
+        maxBundles: Math.min(3, Math.floor(selectedProducts.length / 2)),
+      }),
+    [selectedProducts, tags, weatherSnap],
   );
 
   // -------------------------------------------------------------------------
@@ -378,6 +390,66 @@ export function Compose() {
           </Card>
         )}
       </section>
+
+      {/* Bundles */}
+      {bundles.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Bundle ajánlatok</h2>
+          <p className="text-xs text-muted-foreground">
+            Egymást kiegészítő terméktpárok — kategória affinitás + időjárás alapján rangsorolva.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {bundles.map((bundle, i) => (
+              <Card key={i} className="border-primary/30 bg-primary/5">
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-primary border-primary/40">
+                      {bundle.source === 'tag' ? 'Ajánlott pár' : bundle.source === 'weather' ? 'Időjárás' : 'Kategória'}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      score {bundle.score.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={`/images/${bundle.productA.sku}.webp`}
+                          alt={bundle.productA.title}
+                          loading="lazy"
+                          className="h-10 w-10 rounded object-cover border border-border shrink-0"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{bundle.productA.title}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{bundle.productA.sku}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-muted-foreground text-lg shrink-0">+</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={`/images/${bundle.productB.sku}.webp`}
+                          alt={bundle.productB.title}
+                          loading="lazy"
+                          className="h-10 w-10 rounded object-cover border border-border shrink-0"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{bundle.productB.title}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{bundle.productB.sku}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">{bundle.reason}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Per-user preview */}
       <section className="space-y-3">

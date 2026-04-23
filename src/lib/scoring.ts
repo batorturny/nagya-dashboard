@@ -102,43 +102,189 @@ export function weatherBoostCategories(w: WeatherSnapshot): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Seasonal heuristic — used when tags are not yet populated (Phase 2 fallback)
+// Seasonal categories
 // ---------------------------------------------------------------------------
 
 export type Season = 'tavasz' | 'nyár' | 'ősz' | 'tél';
 
-export function currentSeason(d: Date = new Date()): Season {
-  const m = d.getMonth() + 1;
-  if (m >= 3 && m <= 5) return 'tavasz';
-  if (m >= 6 && m <= 8) return 'nyár';
-  if (m >= 9 && m <= 11) return 'ősz';
+export function currentSeason(today = new Date()): Season {
+  const m = today.getMonth(); // 0-based
+  if (m >= 2 && m <= 4) return 'tavasz';
+  if (m >= 5 && m <= 7) return 'nyár';
+  if (m >= 8 && m <= 10) return 'ősz';
   return 'tél';
 }
 
 export const SEASONAL_CATEGORIES: Record<Season, string[]> = {
-  tavasz: ['Vegetables', 'Bakery', 'Grilling food', 'Dairy'],
-  nyár:   ['Grilling food', 'Grilling non-food', 'Soft drinks', 'Sweets', 'Bottled drinks'],
-  ősz:    ['Pasta & grains', 'Bakery', 'Alcoholic beverages', 'Dairy'],
+  tavasz: ['Vegetables', 'Grilling food', 'Grilling non-food', 'Soft drinks', 'Bottled drinks'],
+  nyár:   ['Grilling food', 'Grilling non-food', 'Soft drinks', 'Bottled drinks', 'Sweets', 'Alcoholic beverages'],
+  ősz:    ['Pasta & grains', 'Bakery', 'Dairy', 'Vegetables', 'Alcoholic beverages'],
   tél:    ['Dairy', 'Pasta & grains', 'Bakery', 'Sweets', 'Alcoholic beverages'],
 };
 
 // ---------------------------------------------------------------------------
-// Affinity graph (categories that complement each other)
+// Affinity graph — weighted category complementarity
 // ---------------------------------------------------------------------------
 
-export const AFFINITY: Record<string, string[]> = {
-  'Grilling food': ['Grilling non-food', 'Alcoholic beverages', 'Soft drinks'],
-  'Grilling non-food': ['Grilling food', 'Alcoholic beverages'],
-  'Dairy': ['Bakery', 'Sweets'],
-  'Bakery': ['Dairy'],
-  'Pasta & grains': ['Vegetables', 'Dairy'],
-  'Vegetables': ['Pasta & grains', 'Grilling food'],
-  'Sweets': ['Soft drinks', 'Dairy'],
-  'Soft drinks': ['Sweets', 'Grilling food'],
-  'Alcoholic beverages': ['Grilling food', 'Other non-food'],
-  'Bottled drinks': ['Vegetables'],
-  'Other non-food': ['Grilling food', 'Alcoholic beverages'],
+export interface AffinityEdge {
+  target: string;
+  weight: number; // 0–1, higher = stronger pairing
+}
+
+export const AFFINITY: Record<string, AffinityEdge[]> = {
+  'Grilling food':      [{ target: 'Grilling non-food', weight: 0.9 }, { target: 'Alcoholic beverages', weight: 0.6 }, { target: 'Soft drinks', weight: 0.5 }, { target: 'Vegetables', weight: 0.4 }],
+  'Grilling non-food':  [{ target: 'Grilling food', weight: 0.9 }, { target: 'Alcoholic beverages', weight: 0.5 }],
+  'Dairy':              [{ target: 'Bakery', weight: 0.7 }, { target: 'Sweets', weight: 0.5 }, { target: 'Pasta & grains', weight: 0.4 }],
+  'Bakery':             [{ target: 'Dairy', weight: 0.7 }, { target: 'Sweets', weight: 0.3 }],
+  'Pasta & grains':     [{ target: 'Vegetables', weight: 0.8 }, { target: 'Dairy', weight: 0.4 }],
+  'Vegetables':         [{ target: 'Pasta & grains', weight: 0.8 }, { target: 'Grilling food', weight: 0.5 }, { target: 'Dairy', weight: 0.3 }],
+  'Sweets':             [{ target: 'Soft drinks', weight: 0.6 }, { target: 'Dairy', weight: 0.5 }],
+  'Soft drinks':        [{ target: 'Sweets', weight: 0.6 }, { target: 'Grilling food', weight: 0.5 }],
+  'Alcoholic beverages':[{ target: 'Grilling food', weight: 0.6 }, { target: 'Grilling non-food', weight: 0.4 }, { target: 'Other non-food', weight: 0.3 }],
+  'Bottled drinks':     [{ target: 'Vegetables', weight: 0.4 }, { target: 'Grilling food', weight: 0.3 }],
+  'Other non-food':     [{ target: 'Grilling food', weight: 0.5 }, { target: 'Alcoholic beverages', weight: 0.3 }],
 };
+
+/** Backward-compat: flat list of affine categories (for UI that only needs names). */
+export function affineCategoriesFor(category: string): string[] {
+  return (AFFINITY[category] ?? []).map((e) => e.target);
+}
+
+/** Look up base affinity weight between two categories (0 if none). */
+export function affinityWeight(catA: string, catB: string): number {
+  return (AFFINITY[catA] ?? []).find((e) => e.target === catB)?.weight ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Weather multipliers for affinity (continuous, not binary)
+// ---------------------------------------------------------------------------
+
+export function weatherAffinityMultiplier(weather: WeatherSnapshot, catA: string, catB: string): number {
+  const grillCats = new Set(['Grilling food', 'Grilling non-food']);
+  const comfortCats = new Set(['Pasta & grains', 'Bakery', 'Dairy']);
+  const coldDrinks = new Set(['Soft drinks', 'Bottled drinks']);
+
+  const involves = (s: Set<string>) => s.has(catA) || s.has(catB);
+
+  let mult = 1.0;
+
+  // Hot weather → grill & cold drinks boosted
+  if (weather.tempC > 28 && involves(grillCats)) mult *= 1.5;
+  else if (weather.tempC > 22 && involves(grillCats)) mult *= 1.2;
+
+  if (weather.tempC > 28 && involves(coldDrinks)) mult *= 1.3;
+
+  // Cold weather → comfort food boosted
+  if (weather.tempC < 10 && involves(comfortCats)) mult *= 1.3;
+  else if (weather.tempC < 16 && involves(comfortCats)) mult *= 1.1;
+
+  // Rain → indoor comfort
+  if (weather.isRainy && involves(comfortCats)) mult *= 1.2;
+
+  // Hot + rain dampens grill
+  if (weather.isRainy && involves(grillCats)) mult *= 0.6;
+
+  return mult;
+}
+
+// ---------------------------------------------------------------------------
+// Bundle detection & creation
+// ---------------------------------------------------------------------------
+
+export interface Bundle {
+  productA: Product;
+  productB: Product;
+  score: number;        // combined affinity score (higher = better pair)
+  reason: string;       // human-readable hungarian explanation
+  source: 'tag' | 'category' | 'weather';
+}
+
+export function createBundles(args: {
+  /** Ranked product list (already scored for a user/campaign). */
+  products: Product[];
+  tags?: Record<string, ProductTags>;
+  weather: WeatherSnapshot;
+  maxBundles?: number;
+}): Bundle[] {
+  const { products, tags = {}, weather, maxBundles = 5 } = args;
+
+  // Build SKU → Product lookup
+  const bySku = new Map(products.map((p) => [p.sku, p]));
+
+  const candidates: Bundle[] = [];
+  const seen = new Set<string>(); // "skuA|skuB" dedup key
+
+  const pairKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
+
+  for (let i = 0; i < products.length; i++) {
+    const a = products[i];
+    const tA = tags[a.sku];
+
+    // --- Layer 1: explicit tag pair_with (strongest signal) ---
+    if (tA?.pair_with?.length) {
+      for (const targetSku of tA.pair_with) {
+        const b = bySku.get(targetSku);
+        if (!b || b.sku === a.sku) continue;
+        const key = pairKey(a.sku, b.sku);
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const wMult = weatherAffinityMultiplier(weather, a.category, b.category);
+        candidates.push({
+          productA: a,
+          productB: b,
+          score: 1.0 * wMult, // tag pairs start at 1.0 (max)
+          reason: `${a.title} + ${b.title} — ajánlott páros`,
+          source: 'tag',
+        });
+      }
+    }
+
+    // --- Layer 2 + 3: weighted category affinity × weather ---
+    for (let j = i + 1; j < products.length; j++) {
+      const b = products[j];
+      const key = pairKey(a.sku, b.sku);
+      if (seen.has(key)) continue;
+
+      const baseWeight = affinityWeight(a.category, b.category);
+      if (baseWeight === 0) continue;
+
+      const wMult = weatherAffinityMultiplier(weather, a.category, b.category);
+      const finalScore = baseWeight * wMult;
+
+      seen.add(key);
+
+      // Build reason string
+      let reason = `${a.category} + ${b.category}`;
+      if (wMult > 1.1) reason += ` — időjárás-kedvező (${weather.tempC.toFixed(0)}°C${weather.isRainy ? ', esős' : ''})`;
+      else if (wMult < 0.8) reason += ` — időjárás miatt kevésbé ajánlott`;
+
+      candidates.push({
+        productA: a,
+        productB: b,
+        score: finalScore,
+        reason,
+        source: wMult > 1.1 ? 'weather' : 'category',
+      });
+    }
+  }
+
+  // Sort by score descending, pick top N ensuring each product appears at most once
+  candidates.sort((a, b) => b.score - a.score);
+
+  const used = new Set<string>();
+  const result: Bundle[] = [];
+
+  for (const c of candidates) {
+    if (result.length >= maxBundles) break;
+    if (used.has(c.productA.sku) || used.has(c.productB.sku)) continue;
+    used.add(c.productA.sku);
+    used.add(c.productB.sku);
+    result.push(c);
+  }
+
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Campaign metadata
