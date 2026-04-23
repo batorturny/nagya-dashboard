@@ -71,16 +71,56 @@ export function discountFor(daysLeft: number): Discount {
 }
 
 // ---------------------------------------------------------------------------
-// Weather → category boost heuristic
+// Weather → category boost heuristic (always returns at least one category
+// so that weather-driven campaigns have something to promote)
 // ---------------------------------------------------------------------------
 
 export function weatherBoostCategories(w: WeatherSnapshot): string[] {
-  const out: string[] = [];
-  if (w.tempC > 22) out.push('Grilling food', 'Grilling non-food', 'Soft drinks', 'Bottled drinks', 'Sweets');
-  if (w.tempC < 10) out.push('Dairy', 'Pasta & grains', 'Bakery');
-  if (w.isRainy) out.push('Pasta & grains', 'Bakery');
-  return out;
+  const out = new Set<string>();
+  if (w.tempC >= 18) {
+    out.add('Grilling food');
+    out.add('Grilling non-food');
+    out.add('Soft drinks');
+    out.add('Bottled drinks');
+    out.add('Sweets');
+  } else if (w.tempC >= 10) {
+    out.add('Pasta & grains');
+    out.add('Vegetables');
+    out.add('Dairy');
+    out.add('Bakery');
+  } else {
+    out.add('Dairy');
+    out.add('Pasta & grains');
+    out.add('Bakery');
+    out.add('Alcoholic beverages');
+  }
+  if (w.isRainy) {
+    out.add('Pasta & grains');
+    out.add('Bakery');
+  }
+  return [...out];
 }
+
+// ---------------------------------------------------------------------------
+// Seasonal heuristic — used when tags are not yet populated (Phase 2 fallback)
+// ---------------------------------------------------------------------------
+
+export type Season = 'tavasz' | 'nyár' | 'ősz' | 'tél';
+
+export function currentSeason(d: Date = new Date()): Season {
+  const m = d.getMonth() + 1;
+  if (m >= 3 && m <= 5) return 'tavasz';
+  if (m >= 6 && m <= 8) return 'nyár';
+  if (m >= 9 && m <= 11) return 'ősz';
+  return 'tél';
+}
+
+export const SEASONAL_CATEGORIES: Record<Season, string[]> = {
+  tavasz: ['Vegetables', 'Bakery', 'Grilling food', 'Dairy'],
+  nyár:   ['Grilling food', 'Grilling non-food', 'Soft drinks', 'Sweets', 'Bottled drinks'],
+  ősz:    ['Pasta & grains', 'Bakery', 'Alcoholic beverages', 'Dairy'],
+  tél:    ['Dairy', 'Pasta & grains', 'Bakery', 'Sweets', 'Alcoholic beverages'],
+};
 
 // ---------------------------------------------------------------------------
 // Affinity graph (categories that complement each other)
@@ -132,78 +172,107 @@ export interface ScoreBreakdown {
   reasons: string[];
 }
 
+// Campaign-type weight matrix. Each signal is multiplied by the corresponding
+// factor before summing. This is what makes "expiry" vs "weather" vs "seasonal"
+// produce visibly different rankings instead of the same list with tiny shifts.
+const CAMPAIGN_WEIGHTS: Record<CampaignType, {
+  expiry: number;
+  weather: number;
+  seasonal: number;
+  fav: number;
+  avoid: number;
+  velocity: number;
+  tagOccasion: number;
+  tagSeason: number;
+}> = {
+  weekly:   { expiry: 1.0, weather: 0.5, seasonal: 0.3, fav: 1.0, avoid: 1.0, velocity: 1.0, tagOccasion: 1.0, tagSeason: 1.0 },
+  expiry:   { expiry: 3.0, weather: 0.0, seasonal: 0.0, fav: 0.8, avoid: 1.0, velocity: 0.3, tagOccasion: 0.0, tagSeason: 0.0 },
+  weather:  { expiry: 0.3, weather: 3.0, seasonal: 0.5, fav: 0.5, avoid: 0.5, velocity: 1.0, tagOccasion: 0.5, tagSeason: 0.5 },
+  seasonal: { expiry: 0.2, weather: 0.5, seasonal: 3.0, fav: 0.6, avoid: 0.6, velocity: 1.0, tagOccasion: 2.0, tagSeason: 2.5 },
+  custom:   { expiry: 1.0, weather: 1.0, seasonal: 1.0, fav: 1.0, avoid: 1.0, velocity: 1.0, tagOccasion: 1.0, tagSeason: 1.0 },
+};
+
 export function scoreFor(input: ScoreInput): ScoreBreakdown {
   const { product, user, tags, weather, campaignType, today = new Date() } = input;
   const reasons: string[] = [];
-  let total = 0;
 
   const daysLeft = daysUntil(product.expiration_date, today);
   const discount = discountFor(daysLeft);
+  const w = CAMPAIGN_WEIGHTS[campaignType];
 
-  // Expiry urgency
-  if (daysLeft === 1) {
-    total += 80;
-    reasons.push('+80 ma lejár');
-  } else if (daysLeft === 2) {
-    total += 60;
-    reasons.push('+60 holnap lejár');
-  } else if (daysLeft === 3) {
-    total += 40;
-    reasons.push('+40 hamarosan lejár');
-  } else if (daysLeft >= 4 && daysLeft <= 7) {
-    total += 20;
-    reasons.push('+20 heti lejárat');
-  } else if (daysLeft >= 8 && daysLeft <= 30) {
-    total += 10;
-    reasons.push('+10 havon belüli lejárat');
+  // ------- Hard filters per campaign type (skip completely irrelevant items) -------
+  if (campaignType === 'expiry' && daysLeft > 14) {
+    return { total: 0, daysLeft, discount, reasons: ['skip: >14 nap lejárat'] };
+  }
+  const weatherBoost = weatherBoostCategories(weather);
+  const isWeatherMatch = weatherBoost.includes(product.category);
+  const isFavorite = product.category === user.favorite_category;
+
+  if (campaignType === 'weather' && !isWeatherMatch && !isFavorite) {
+    return { total: 0, daysLeft, discount, reasons: ['skip: nincs időjárás-match'] };
   }
 
-  // Personalization
-  if (product.category === user.favorite_category) {
-    total += 40;
-    reasons.push(`+40 kedvenc: ${product.category}`);
-  }
-  if (product.category === user.least_purchased_category) {
-    total -= 25;
-    reasons.push(`-25 kerüli: ${product.category}`);
+  const season = currentSeason(today);
+  const seasonCats = SEASONAL_CATEGORIES[season];
+  const isSeasonalMatch = seasonCats.includes(product.category);
+  if (campaignType === 'seasonal' && !isSeasonalMatch && !isFavorite) {
+    return { total: 0, daysLeft, discount, reasons: ['skip: nincs szezon-match'] };
   }
 
-  // Hot mover
+  // ------- Signal computation -------
+  let expiryBase = 0;
+  if (daysLeft === 1) expiryBase = 80;
+  else if (daysLeft === 2) expiryBase = 60;
+  else if (daysLeft === 3) expiryBase = 40;
+  else if (daysLeft >= 4 && daysLeft <= 7) expiryBase = 20;
+  else if (daysLeft >= 8 && daysLeft <= 30) expiryBase = 10;
+
   const velocity = product.stock.current > 0
     ? product.stock.last_7_day_sold / product.stock.current
     : 0;
-  if (velocity >= 0.5) {
-    total += 10;
-    reasons.push('+10 hot mover');
-  }
 
-  // Weather
-  const wBoost = weatherBoostCategories(weather);
-  if (wBoost.includes(product.category)) {
-    total += 15;
-    reasons.push('+15 időjárás-match');
-  }
-
-  // Category affinity — soft hint, counted regardless of other selections in list.
-  // (UI adds explicit bundle boosts on top when another picked product is in AFFINITY[category].)
-  const campaignPrefers: Partial<Record<CampaignType, string[]>> = {
-    weather: wBoost,
-    seasonal: wBoost,
-    expiry: [],
-    weekly: [],
-    custom: [],
+  const signals = {
+    expiry: expiryBase,
+    weather: isWeatherMatch ? 30 : 0,
+    seasonal: isSeasonalMatch ? 25 : 0,
+    fav: isFavorite ? 40 : 0,
+    avoid: product.category === user.least_purchased_category ? -25 : 0,
+    velocity: velocity >= 0.5 ? 10 : 0,
+    tagOccasion: tags?.occasion?.length ? 15 : 0,
+    tagSeason:
+      tags?.season?.includes(season) ? 20 :
+      tags?.season?.length ? 10 : 0,
   };
-  const campaignBoost = campaignPrefers[campaignType] ?? [];
-  if (campaignBoost.includes(product.category)) {
-    total += 5;
-    reasons.push(`+5 ${campaignType} campaign`);
-  }
 
-  // Optional tag signals (Phase 2 — graceful fallback if tags empty)
-  if (tags?.occasion?.includes('grill') && campaignType === 'seasonal' && weather.tempC > 22) {
-    total += 10;
-    reasons.push('+10 grill occasion tag');
-  }
+  const weighted = {
+    expiry: Math.round(signals.expiry * w.expiry),
+    weather: Math.round(signals.weather * w.weather),
+    seasonal: Math.round(signals.seasonal * w.seasonal),
+    fav: Math.round(signals.fav * w.fav),
+    avoid: Math.round(signals.avoid * w.avoid),
+    velocity: Math.round(signals.velocity * w.velocity),
+    tagOccasion: Math.round(signals.tagOccasion * w.tagOccasion),
+    tagSeason: Math.round(signals.tagSeason * w.tagSeason),
+  };
+
+  const total =
+    weighted.expiry +
+    weighted.weather +
+    weighted.seasonal +
+    weighted.fav +
+    weighted.avoid +
+    weighted.velocity +
+    weighted.tagOccasion +
+    weighted.tagSeason;
+
+  if (weighted.expiry) reasons.push(`lejárat +${weighted.expiry}`);
+  if (weighted.weather) reasons.push(`időjárás +${weighted.weather}`);
+  if (weighted.seasonal) reasons.push(`szezon +${weighted.seasonal}`);
+  if (weighted.fav) reasons.push(`kedvenc +${weighted.fav}`);
+  if (weighted.avoid) reasons.push(`kerüli ${weighted.avoid}`);
+  if (weighted.velocity) reasons.push(`hot +${weighted.velocity}`);
+  if (weighted.tagOccasion) reasons.push(`tag·occ +${weighted.tagOccasion}`);
+  if (weighted.tagSeason) reasons.push(`tag·szezon +${weighted.tagSeason}`);
 
   return { total, daysLeft, discount, reasons };
 }
@@ -292,6 +361,7 @@ export function rankProductsForCampaign(args: {
       }),
     }))
     .filter((x) => daysUntil(x.product.expiration_date, today) >= 1) // drop expired
+    .filter((x) => x.breakdown.total > 0) // drop items excluded by campaign-type filter
     .sort((a, b) => b.breakdown.total - a.breakdown.total)
     .slice(0, limit);
 }
