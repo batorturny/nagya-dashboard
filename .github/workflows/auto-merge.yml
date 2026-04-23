@@ -1,0 +1,26 @@
+name: Auto-merge all PRs to main
+
+# WARNING: this workflow merges every PR into main without review.
+# Anyone on the internet can push arbitrary code to this repo via a fork PR.
+# Only keep this enabled for hackathon / demo repos with no sensitive content.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: github.event.pull_request.base.ref == 'main' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr merge "$PR" --repo "$REPO" --squash --delete-branch --admin
