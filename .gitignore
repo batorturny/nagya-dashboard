@@ -13,6 +13,7 @@ node_modules/
 deploy/
 public/
 dist/
+*.tsbuildinfo
 
 # transcription intermediates (keep transcript.txt, skip large binaries)
 docs/trans/*.m4a

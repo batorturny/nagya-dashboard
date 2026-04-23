@@ -20,13 +20,10 @@
     "WEATHER_LON": "19.0402"
   },
 
-  // Create with:
-  //   npx wrangler kv namespace create TAGS
-  //   npx wrangler kv namespace create CAMPAIGNS
-  // Then paste the returned IDs here.
+  // KV namespaces on the BILDR HUB account.
   "kv_namespaces": [
-    { "binding": "TAGS", "id": "__REPLACE_WITH_TAGS_KV_ID__" },
-    { "binding": "CAMPAIGNS", "id": "__REPLACE_WITH_CAMPAIGNS_KV_ID__" }
+    { "binding": "TAGS", "id": "c5cde28ea9754f44a06228b07ba3a7ff" },
+    { "binding": "CAMPAIGNS", "id": "5f86c4db049c4c1d83c4067c05a543b5" }
   ],
 
   "observability": {

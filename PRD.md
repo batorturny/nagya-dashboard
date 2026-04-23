@@ -182,14 +182,42 @@ Campaign {
 ## 7. Technical architecture
 
 ### 7.1 Stack
-- **Frontend:** Vanilla HTML + TypeScript module (vagy sima JS) — **nincs React**, hackathon-scope-ban overkill. Alpine.js vagy htmx opcionális.
-- **Backend:** **Cloudflare Worker** (nem Pages Functions), **Hono** routerrel, assets binding-gel a statikus fájlokhoz
+- **Frontend:** **React 18 + TypeScript + Vite + Tailwind CSS v3 + shadcn/ui (new-york, zinc base)**, `lucide-react` ikonokhoz. A shadcn komponenseket `npx shadcn add <name>` parancsokkal húzzuk be. `@/*` path alias az `app/*`-ra.
+- **Backend:** **Cloudflare Worker** (nem Pages Functions), **Hono** routerrel, assets binding-gel a Vite build-output kiszolgálásához
 - **Storage:** **Cloudflare KV** (tags, campaigns) — gyors setup, nincs migráció. Később D1-re válthatunk ha komplex lekérdezés kell.
 - **AI:** OpenRouter → Gemini 2.0 Flash (olcsó, magyar nyelv OK)
 - **Email:** Resend API
 - **Weather:** AccuWeather API (opcionális; fallback: Open-Meteo, ingyenes)
-- **Barcode + PDF:** kliens-oldal, `JsBarcode` + `jsPDF` CDN
-- **CDN:** A Worker `assets` binding-e szolgálja ki a képeket (Cloudflare CDN automatikus)
+- **Barcode + PDF:** kliens-oldal, `jsbarcode` + `jspdf` npm packagek, vagy CDN-ről (a PDF-gen nem blokkol, külön komponens)
+- **CDN:** A Worker `assets` binding-e szolgálja ki a Vite build-et és a `images/` CDN-t (Cloudflare automatikus)
+
+### 7.1b Projekt-struktúra
+
+```
+/
+├── app/                         React frontend (Vite root)
+│   ├── index.html               Vite entry
+│   ├── main.tsx                 React bootstrap
+│   ├── App.tsx
+│   ├── globals.css              Tailwind directives + shadcn CSS változók
+│   ├── components/
+│   │   └── ui/                  shadcn komponensek ide jönnek
+│   ├── lib/utils.ts             shadcn `cn()` helper
+│   └── pages/                   route-ok (Products, Compose, Send)
+├── src/                         Worker backend
+│   └── index.ts                 Hono app
+├── public/                      Build output (gitignored; build.sh rakja össze)
+├── dist/client/                 Vite output (gitignored)
+├── images/                      Termék-képek (CDN-ként szolgálva)
+├── index.html                   Team legacy dashboard (megmarad referenciaként, nem kerül ki)
+├── vite.config.ts
+├── tailwind.config.ts
+├── postcss.config.js
+├── components.json              shadcn config
+├── wrangler.jsonc               Worker config
+├── build.sh                     vite build → public/ + images/ copy
+└── tsconfig.json + tsconfig.app.json + tsconfig.worker.json
+```
 
 ### 7.2 Architektúra ábra
 ```
