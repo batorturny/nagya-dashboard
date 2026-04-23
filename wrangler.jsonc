@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nagya-dashboard",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  "vars": {
+    "NAGYA_API_BASE": "https://api.nagya.app",
+    "SENDER_EMAIL": "noreply@bildr.hu",
+    "SENDER_NAME": "nagya.app ajanlatok",
+    "OPENROUTER_MODEL": "google/gemini-2.0-flash-001",
+    "WEATHER_LAT": "47.4979",
+    "WEATHER_LON": "19.0402"
+  },
+
+  // Create with:
+  //   npx wrangler kv namespace create TAGS
+  //   npx wrangler kv namespace create CAMPAIGNS
+  // Then paste the returned IDs here.
+  "kv_namespaces": [
+    { "binding": "TAGS", "id": "__REPLACE_WITH_TAGS_KV_ID__" },
+    { "binding": "CAMPAIGNS", "id": "__REPLACE_WITH_CAMPAIGNS_KV_ID__" }
+  ],
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

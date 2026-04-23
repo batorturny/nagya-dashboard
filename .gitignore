@@ -11,6 +11,8 @@ node_modules/
 # local dev / build artifacts
 .wrangler/
 deploy/
+public/
+dist/
 
 # transcription intermediates (keep transcript.txt, skip large binaries)
 docs/trans/*.m4a

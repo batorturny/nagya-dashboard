@@ -183,32 +183,41 @@ Campaign {
 
 ### 7.1 Stack
 - **Frontend:** Vanilla HTML + TypeScript module (vagy sima JS) — **nincs React**, hackathon-scope-ban overkill. Alpine.js vagy htmx opcionális.
-- **Backend:** Cloudflare Pages Functions (TypeScript)
-- **Storage:** Cloudflare KV (tags, campaigns)
+- **Backend:** **Cloudflare Worker** (nem Pages Functions), **Hono** routerrel, assets binding-gel a statikus fájlokhoz
+- **Storage:** **Cloudflare KV** (tags, campaigns) — gyors setup, nincs migráció. Később D1-re válthatunk ha komplex lekérdezés kell.
 - **AI:** OpenRouter → Gemini 2.0 Flash (olcsó, magyar nyelv OK)
 - **Email:** Resend API
 - **Weather:** AccuWeather API (opcionális; fallback: Open-Meteo, ingyenes)
 - **Barcode + PDF:** kliens-oldal, `JsBarcode` + `jsPDF` CDN
-- **CDN:** Cloudflare Pages (képekre külön R2 vagy Pages assets)
+- **CDN:** A Worker `assets` binding-e szolgálja ki a képeket (Cloudflare CDN automatikus)
 
 ### 7.2 Architektúra ábra
 ```
-┌─────────────────────────┐
-│  Pages static SPA       │
-│  /products  (lista)     │──────▶ /api/tags         (KV)
-│  /compose   (composer)  │──────▶ /api/weather      (AccuWeather)
-│  /preview   (email)     │──────▶ /api/products     (proxy)
-│  /campaigns (history)   │──────▶ /api/users        (proxy)
-└─────────────────────────┘       ┌──────────────────────┐
-                                  │  Pages Functions     │
-                                  │  /api/ai-tag         │──▶ OpenRouter
-                                  │  /api/send           │──▶ Resend
-                                  │  /api/coupon-pdf     │──▶ (kliens gen)
-                                  └──────────────────────┘
-                                            │
-                                            ▼
-                                      Cloudflare KV
-                                      (tags, campaigns)
+                  ┌───────────────────────────────────────────┐
+                  │      Cloudflare Worker (Hono)             │
+                  │      name: nagya-dashboard                │
+                  │      entry: src/index.ts                  │
+                  │                                           │
+Browser  ◀───▶    │  /               → assets binding         │
+                  │                    (index.html, images,   │
+                  │                     js, css → ./public)   │
+                  │                                           │
+                  │  /api/users      → proxy /users           │
+                  │  /api/products   → proxy /products        │
+                  │  /api/weather    → Open-Meteo/AccuWeather │
+                  │  /api/tags       → KV TAGS                │
+                  │  /api/tags/:sku  → KV TAGS (PUT)          │
+                  │  /api/ai-tag     → OpenRouter Gemini      │
+                  │  /api/campaigns  → KV CAMPAIGNS           │
+                  │  /api/send       → Resend                 │
+                  └──────────┬────────────────────────────────┘
+                             │
+                    ┌────────┴──────────┬──────────┐
+                    ▼                   ▼          ▼
+             KV: TAGS            KV: CAMPAIGNS   Secrets:
+             KV: CAMPAIGNS                       RESEND_API_KEY
+                                                 OPENROUTER_API_KEY
+                                                 ACCUWEATHER_KEY (opt)
 ```
 
 ### 7.3 Endpoint lista
@@ -231,28 +240,31 @@ Campaign {
 
 Minden fázis **külön commit-olható**, **külön deployolható**. Fázisonként ~30-90 perc reális.
 
-### Phase 1 — Foundation + live data
-**Deliverable:** Cloudflare Pages app él, fetcheli a live `/users`, `/products`-ot, van termék-lista UI szűrésekkel.
-- `app/` projekt struktúra + `wrangler.jsonc`
-- `functions/api/users.ts`, `products.ts` — proxy + CORS
-- `app/index.html` — live termék-lista (a mostani dashboard leghasznosabb részei átemelve)
-- KV namespace létrehozása a tag-ekhez
-- Deploy
-**Verifikáció:** https://nagya-hirlevel.pages.dev live adattal jön fel.
+### Phase 1 — Worker skeleton + live data
+**Deliverable:** Cloudflare Worker él a `nagya-dashboard` néven, Hono routerrel, assets binding-gel kiszolgálja a meglévő `index.html`-t és a `images/`-t, két működő API endpoint proxyzza a live `/users` és `/products` adatot.
+- `wrangler.jsonc` — Worker config, `main: src/index.ts`, `assets.directory: "./public"`
+- `package.json` — `hono` + `wrangler` devDeps
+- `src/index.ts` — Hono app: `/api/users`, `/api/products` proxy + CORS + in-memory 60s cache
+- `public/` — ide kerül `index.html`, `products.json`, `users.json`, `images/` (build step másolja)
+- `build.sh` — copy statikus fájlokat `public/`-ba
+- KV namespace létrehozva: `TAGS`, `CAMPAIGNS` (csak bindingek, még üres)
+- Deploy: Cloudflare dashboard → Workers → Git integration → repo connect → auto-deploy main push-ra
+**Verifikáció:** `https://nagya-dashboard.<account>.workers.dev` megnyit, `index.html` live, `/api/users` 200-at ad a teszt adattal, `/api/products` 200, mindkettő friss data-val.
 
 ### Phase 2 — AI tagging pipeline
 **Deliverable:** Termékek automatikusan megkapnak `season` / `weather` / `occasion` / `pair_with` / `pair_conflict` tageket, és tárolódnak KV-ban.
-- `functions/api/ai-tag.ts` → OpenRouter → Gemini 2.0 Flash batch
+- `src/routes/ai-tag.ts` → OpenRouter → Gemini 2.0 Flash batch
   - Input: 76 termék title + description + category
-  - Output: strukturált JSON tag-tömb, validálva Zod-szerű schema-val (de zod nélkül, kézi check)
-- `functions/api/tags.ts` GET / `:sku` PUT
+  - Output: strukturált JSON tag-tömb, validálva kézi check-kel
+- `src/routes/tags.ts` GET (all) / `:sku` PUT (manual override)
+- KV secret: `OPENROUTER_API_KEY` beállítva
 - UI: "AI címkézés" gomb a termék-oldalon, per-termék manuális override
 **Verifikáció:** 76 termékre megjelenik 3-5 tag, "Grill kolbász" → `{occasion:['grill'], season:['tavasz','nyár'], weather:['napos','meleg'], pair_with:['GNF-001 Faszén']}`.
 
 ### Phase 3 — Composer + weather + personalization
 **Deliverable:** Admin össze tud állítani egy kampányt, lát preview-t, időjárás-widget működik.
-- `functions/api/weather.ts` → Open-Meteo (ha nincs AccuWeather key) vagy AccuWeather
-- `app/compose.html` — composer UI:
+- `src/routes/weather.ts` → Open-Meteo (ha nincs AccuWeather key) vagy AccuWeather
+- `public/compose.html` — composer UI:
   - Felső sáv: kampány-típus chipek
   - Javaslat-lista (tag + weather + expiry + urgency alapján)
   - Drag-to-remove / add-from-search
@@ -265,17 +277,17 @@ Minden fázis **külön commit-olható**, **külön deployolható**. Fázisonké
 
 ### Phase 4 — Send + PDF coupon
 **Deliverable:** Kampány elküldhető 5 usernek, mindegyik kap vonalkódos PDF kupont (csatolva vagy URL-en).
-- `functions/api/send.ts` → Resend batch
+- `src/routes/send.ts` → Resend batch
   - HTML template inline CSS-sel, `{{product[N].title}}` substitution
   - Kuponkód determinisztikus: `NAGYA-{sku}-{hash(userId+sku)}`
   - Sender: `noreply@bildr.hu` (verified)
-- Kliens-oldali PDF gen: `jsPDF` + `JsBarcode` (Code128)
+- Kliens-oldali PDF gen: `jsPDF` + `JsBarcode` (Code128), `public/lib/`-ben vagy CDN-ről
   - Toggle: per-email vs. per-termék PDF
 - Küldés-flow:
   - Confirm dialog
   - POST /api/send
   - Status UI (5 zöld pipa vagy error)
-- Secret: `RESEND_API_KEY` → wrangler pages secret
+- Secret: `RESEND_API_KEY` → `wrangler secret put` vagy Cloudflare dashboard
 **Verifikáció:** 5 email megérkezik az `aiishackaton+*@gmail.com`-ra, PDF letölthető a linkről, barcode olvasható.
 
 ---
