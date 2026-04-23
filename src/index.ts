@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
 import { weatherHandler } from './routes/weather';
+import { aiTagHandler } from './routes/ai-tag';
 import {
   createCampaignHandler,
   listCampaignsHandler,
@@ -80,12 +81,7 @@ app.put('/api/tags/:sku', async (c) => {
   return c.json({ sku, tags: record });
 });
 
-app.post('/api/ai-tag', (c) =>
-  c.json(
-    { status: 'not_implemented', phase: 2, hint: 'Gemini Flash batch tagging — coming in Phase 2' },
-    501,
-  ),
-);
+app.post('/api/ai-tag', aiTagHandler);
 
 // ---------------------------------------------------------------------------
 // Phase 3 — weather + campaign composer
