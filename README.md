@@ -33,3 +33,5 @@ Uses `gemini-2.5-flash-image` (Nano Banana). Existing images are skipped.
 ```
 
 Fetches `/users` and `/products`, embeds into `index.html`.
+
+<!-- auto-merge sanity test -->
