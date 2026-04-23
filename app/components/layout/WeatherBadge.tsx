@@ -33,7 +33,7 @@ export function WeatherBadge() {
 
   if (failed) {
     return (
-      <Badge variant="outline" className="text-muted-foreground">
+      <Badge variant="outline" className="border-white/30 text-white/60">
         időjárás n/a
       </Badge>
     );
@@ -41,17 +41,17 @@ export function WeatherBadge() {
 
   if (!data) {
     return (
-      <Badge variant="outline" className="text-muted-foreground animate-pulse">
+      <Badge variant="outline" className="border-white/30 text-white/60 animate-pulse">
         🌡️ …
       </Badge>
     );
   }
 
   return (
-    <Badge variant="outline" className="gap-1.5">
+    <Badge variant="outline" className="gap-1.5 border-white/30 text-white">
       <span>{data.current.emoji}</span>
       <span className="tabular-nums">{Math.round(data.current.tempC)}°C</span>
-      <span className="text-muted-foreground">· {data.location}</span>
+      <span className="text-white/60">· {data.location}</span>
     </Badge>
   );
 }
