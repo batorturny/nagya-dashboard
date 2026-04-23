@@ -309,6 +309,8 @@ export interface ScoreInput {
   weather: WeatherSnapshot;
   campaignType: CampaignType;
   today?: Date;
+  // Per-user boost (amplifies fav +, avoid -). Defaults to 1.0 (aggregate view).
+  personalBoost?: number;
 }
 
 export interface ScoreBreakdown {
@@ -340,6 +342,10 @@ const CAMPAIGN_WEIGHTS: Record<CampaignType, {
 
 export function scoreFor(input: ScoreInput): ScoreBreakdown {
   const { product, user, tags, weather, campaignType, today = new Date() } = input;
+  // In per-user view we amplify personalization signals (fav +, avoid -) so the
+  // user's favorite category outranks a slightly more urgent item from a category
+  // they don't care about. Defaults to 1.0 (aggregate / admin view).
+  const personalBoost = input.personalBoost ?? 1;
   const reasons: string[] = [];
 
   const daysLeft = daysUntil(product.expiration_date, today);
@@ -381,8 +387,11 @@ export function scoreFor(input: ScoreInput): ScoreBreakdown {
     expiry: expiryBase,
     weather: isWeatherMatch ? 30 : 0,
     seasonal: isSeasonalMatch ? 25 : 0,
-    fav: isFavorite ? 40 : 0,
-    avoid: product.category === user.least_purchased_category ? -25 : 0,
+    fav: isFavorite ? Math.round(40 * personalBoost) : 0,
+    avoid:
+      product.category === user.least_purchased_category
+        ? Math.round(-25 * personalBoost)
+        : 0,
     velocity: velocity >= 0.5 ? 10 : 0,
     tagOccasion: tags?.occasion?.length ? 15 : 0,
     tagSeason:

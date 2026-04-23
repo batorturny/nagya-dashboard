@@ -29,6 +29,7 @@ import {
   type User,
   type WeatherSnapshot,
   createBundles,
+  currentSeason,
   detectConflicts,
   rankProductsForCampaign,
   scoreFor,
@@ -141,11 +142,16 @@ export function Compose() {
 
   // -------------------------------------------------------------------------
   // Per-user personalization preview
+  // Each user is ranked against the FULL product catalog (not just the
+  // aggregate "javasolt termékek" list), and personalization signals
+  // (fav +, avoid -) are amplified via personalBoost so the user's
+  // favorite_category dominates unless an item is very urgent. Slice
+  // follows the 1-10 productCount slider.
   // -------------------------------------------------------------------------
   const perUser = useMemo(() => {
-    if (!users) return [];
+    if (!users || !products) return [];
     return users.map((user) => {
-      const ranked = selectedProducts
+      const ranked = products
         .map((product) => ({
           product,
           breakdown: scoreFor({
@@ -154,14 +160,15 @@ export function Compose() {
             tags: tags[product.sku],
             weather: weatherSnap,
             campaignType,
+            personalBoost: 2.5,
           }),
         }))
         .filter((x) => x.breakdown.total > 0)
         .sort((a, b) => b.breakdown.total - a.breakdown.total)
-        .slice(0, Math.min(3, selectedProducts.length));
+        .slice(0, productCount);
       return { user, items: ranked };
     });
-  }, [users, selectedProducts, tags, weatherSnap, campaignType]);
+  }, [users, products, tags, weatherSnap, campaignType, productCount]);
 
   // -------------------------------------------------------------------------
   // Send handler
@@ -491,10 +498,69 @@ export function Compose() {
 
       {/* Per-user preview */}
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Per-user preview</h2>
+        <div className="flex items-baseline justify-between gap-4 flex-wrap">
+          <h2 className="text-lg font-semibold">Per-user preview</h2>
+          <span className="text-xs font-mono text-muted-foreground">
+            top {productCount} / user · teljes katalógusból
+          </span>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Ugyanaz a termékkészlet, de minden usernél más a top-3 a preferenciái + scoring alapján.
+          Minden user a teljes katalógusból kapja a saját top {productCount}-ét. A scoring
+          felerősíti a kedvenc kategóriát (personalBoost 2.5×), így a user preferenciája
+          dominálja a rangsort, amíg nincs extrém urgens lejárat.
         </p>
+
+        {/* Scoring-rendszer logika-tábla */}
+        <Card className="bg-muted/30 border-dashed">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Scoring rendszer — jelenlegi kampány: {CAMPAIGN_META[campaignType].label}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">kedvenc kategória (user fav)</span>
+                <span className="font-mono tabular-nums">+40 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.8' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '0.6' : '1.0'} × 2.5</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">kerüli (least purchased)</span>
+                <span className="font-mono tabular-nums text-destructive">-25 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '1.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '0.6' : '1.0'} × 2.5</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">lejárat 1/2/3/7/30 nap</span>
+                <span className="font-mono tabular-nums">+80/60/40/20/10 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '3.0' : campaignType === 'weather' ? '0.3' : campaignType === 'seasonal' ? '0.2' : '1.0'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">időjárás-match kategória</span>
+                <span className="font-mono tabular-nums">+30 × {campaignType === 'weekly' ? '0.5' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '3.0' : campaignType === 'seasonal' ? '0.5' : '1.0'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">szezon-match</span>
+                <span className="font-mono tabular-nums">+25 × {campaignType === 'weekly' ? '0.3' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '3.0' : '1.0'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">AI tag · occasion</span>
+                <span className="font-mono tabular-nums">+15 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '2.0' : '1.0'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">AI tag · season match</span>
+                <span className="font-mono tabular-nums">+20 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '2.5' : '1.0'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">hot mover (sold7d/stock ≥ 0.5)</span>
+                <span className="font-mono tabular-nums">+10 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.3' : campaignType === 'weather' ? '1.0' : campaignType === 'seasonal' ? '1.0' : '1.0'}</span>
+              </div>
+            </div>
+            <div className="pt-1.5 border-t border-border/60 text-muted-foreground">
+              <span className="font-medium">Hard filter:</span>{' '}
+              {campaignType === 'expiry' && 'csak ≤14 napon belül lejáró termékek'}
+              {campaignType === 'weather' && 'csak az aktuális hőmérsékletbe tartozó kategóriák (kivétel: user fav)'}
+              {campaignType === 'seasonal' && `csak ${currentSeason()} kategóriák (kivétel: user fav)`}
+              {(campaignType === 'weekly' || campaignType === 'custom') && 'nincs'}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {perUser.map(({ user, items }) => (
@@ -505,7 +571,8 @@ export function Compose() {
                   {user.name}
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  kedvenc: {user.favorite_category}
+                  kedvenc: <span className="text-foreground">{user.favorite_category}</span>
+                  {' · '}kerüli: <span className="text-foreground">{user.least_purchased_category}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0 space-y-2">
@@ -517,17 +584,24 @@ export function Compose() {
                   items.map(({ product, breakdown }) => (
                     <div
                       key={product.sku}
-                      className="flex items-center gap-2 text-xs rounded-md bg-muted/40 px-2 py-1.5"
+                      className="flex flex-col gap-1 text-xs rounded-md bg-muted/40 px-2 py-1.5"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate">{product.title}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {product.sku} · {product.category}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate">{product.title}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">
+                            {product.sku} · {product.category}
+                          </div>
                         </div>
+                        <Badge variant="secondary" className="tabular-nums">
+                          {breakdown.total}
+                        </Badge>
                       </div>
-                      <Badge variant="secondary" className="tabular-nums">
-                        {breakdown.total}
-                      </Badge>
+                      {breakdown.reasons.length > 0 && (
+                        <div className="text-[10px] text-muted-foreground font-mono truncate">
+                          {breakdown.reasons.join(' · ')}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
