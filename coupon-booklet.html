@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<title>Nagya Coupon Booklet — template</title>
+<style>
+  @page { size: A4; margin: 0; }
+
+  :root {
+    --aldi-blue: #00549f;
+    --aldi-dark: #002d5c;
+    --aldi-yellow: #ffd800;
+    --aldi-red: #e30613;
+    --aldi-light: #f4f4f4;
+    --ink: #1a1a1a;
+    --muted: #666;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: #e8e8e8;
+  }
+
+  .page {
+    width: 210mm;
+    height: 297mm;
+    margin: 0 auto;
+    background: #fff;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .logo { height: 22mm; width: auto; max-width: 32mm; display: block; object-fit: contain; }
+
+  .masthead {
+    background: var(--aldi-blue);
+    color: #fff;
+    padding: 6mm 10mm 5mm 10mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8mm;
+    border-bottom: 2.5mm solid var(--aldi-yellow);
+  }
+  .brand { display: flex; align-items: center; gap: 5mm; }
+  .brand-text .tag { font-size: 2.6mm; letter-spacing: 0.2em; font-weight: 600; opacity: 0.85; text-transform: uppercase; }
+  .brand-text h1 { font-size: 7mm; font-weight: 900; letter-spacing: -0.01em; line-height: 1; margin-top: 1mm; font-family: "Arial Black", sans-serif; }
+  .brand-text .user-line { font-size: 2.8mm; font-weight: 500; opacity: 0.85; margin-top: 1.5mm; }
+  .masthead .period { text-align: right; font-size: 3mm; }
+  .masthead .period strong { font-size: 4mm; display: block; font-weight: 800; letter-spacing: 0.02em; margin-top: 0.5mm; }
+  .masthead .discount-cta { background: var(--aldi-red); color: #fff; padding: 3mm 5mm; font-family: "Arial Black", sans-serif; font-size: 8mm; border-radius: 2mm; line-height: 1; transform: rotate(-5deg); box-shadow: 0 1mm 2mm rgba(0,0,0,0.25); text-align: center; }
+  .masthead .discount-cta small { display: block; font-size: 2.2mm; margin-top: 1mm; letter-spacing: 0.08em; font-weight: 600; }
+
+  .ribbon { background: var(--aldi-yellow); color: var(--aldi-blue); padding: 2.5mm 10mm; font-weight: 800; font-size: 3mm; letter-spacing: 0.06em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+
+  .grid { padding: 4mm 6mm; display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; gap: 3mm; flex: 1; }
+
+  .coupon {
+    border: 0.4mm dashed #8a8a8a;
+    border-radius: 1.5mm;
+    background: #fff;
+    padding: 2.5mm;
+    display: grid;
+    grid-template-columns: 22mm 1fr;
+    gap: 3mm;
+    position: relative;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .coupon .img { width: 22mm; height: 22mm; background: var(--aldi-light); border-radius: 1mm; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .coupon .img img { width: 100%; height: 100%; object-fit: cover; }
+  .coupon .badge { position: absolute; top: -2mm; right: 3mm; background: var(--aldi-red); color: #fff; font-weight: 900; font-size: 3mm; padding: 1mm 2mm; border-radius: 1mm; letter-spacing: 0.04em; font-family: "Arial Black", sans-serif; }
+  .coupon .info { display: flex; flex-direction: column; min-width: 0; }
+  .coupon .cat { font-size: 2.2mm; color: var(--aldi-blue); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .coupon .title { font-size: 3.4mm; font-weight: 800; line-height: 1.1; margin-top: 0.5mm; color: var(--aldi-dark); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .coupon .prices { display: flex; align-items: baseline; gap: 2mm; margin-top: 1mm; }
+  .coupon .old { font-size: 2.6mm; color: var(--muted); text-decoration: line-through; }
+  .coupon .new { font-size: 5.5mm; color: var(--aldi-red); font-weight: 900; line-height: 1; font-family: "Arial Black", sans-serif; letter-spacing: -0.02em; }
+  .coupon .bottom { margin-top: auto; padding-top: 1.5mm; border-top: 0.25mm dashed #c0c0c0; display: flex; align-items: flex-end; justify-content: space-between; gap: 2mm; }
+  .coupon .code-wrap svg { display: block; }
+  .coupon .code-wrap .code { font-family: "Courier New", monospace; font-size: 2.1mm; letter-spacing: 0.04em; font-weight: 700; margin-top: 0.3mm; }
+  .coupon .valid { font-size: 2mm; color: var(--muted); text-align: right; line-height: 1.2; white-space: nowrap; }
+  .coupon .valid strong { color: var(--aldi-dark); font-size: 2.4mm; display: block; }
+
+  .page-footer { padding: 2.5mm 10mm; display: flex; justify-content: space-between; align-items: center; font-size: 2.4mm; color: var(--muted); background: var(--aldi-light); border-top: 0.3mm solid #ddd; }
+  .page-footer .pnum { background: var(--aldi-blue); color: #fff; padding: 0.8mm 2.5mm; border-radius: 1mm; font-weight: 700; font-size: 2.4mm; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="masthead">
+    <div class="brand">
+      <img class="logo" id="logo-img" alt="logo">
+      <div class="brand-text">
+        <div class="tag" data-var="subtitle"></div>
+        <h1 data-var="headline"></h1>
+        <div class="user-line" data-var="userLine"></div>
+      </div>
+    </div>
+    <div class="discount-cta">
+      <span data-var="avgDiscountLine"></span>
+      <small data-var="avgDiscountLabel"></small>
+    </div>
+    <div class="period">
+      <span>Érvényes</span>
+      <strong data-var="validPeriod"></strong>
+    </div>
+  </div>
+
+  <div class="ribbon">
+    <span data-var="ribbonLeft"></span>
+    <span data-var="ribbonRight"></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="page-footer">
+    <span data-var="issueLabel"></span>
+    <span data-var="footerNote"></span>
+    <span class="pnum" data-var="pageIndicator"></span>
+  </div>
+</div>
+
+<template id="coupon-tpl">
+  <div class="coupon">
+    <div class="badge" data-var="discountBadge"></div>
+    <div class="img">
+      <img data-var-attr="src:imageUrl;alt:title">
+    </div>
+    <div class="info">
+      <div class="cat" data-var="category"></div>
+      <div class="title" data-var="title"></div>
+      <div class="prices">
+        <span class="old" data-var="oldPriceLabel"></span>
+        <span class="new" data-var="newPriceLabel"></span>
+      </div>
+      <div class="bottom">
+        <div class="code-wrap">
+          <svg class="bc" data-var-attr="data-code:code"></svg>
+          <div class="code" data-var="code"></div>
+        </div>
+        <div class="valid">
+          <strong data-var="validToLabel"></strong>
+          <span data-var="limit"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- =========================================================
+     TEMPLATE VARIABLES — edit this config to regenerate booklet
+     =========================================================
+     Everything in window.__BOOKLET_CONFIG__ is a placeholder.
+     Copy this file, swap values / coupons array, done.           -->
+<script>
+  window.__BOOKLET_CONFIG__ = {
+    // ---- BRAND ----
+    brand: {
+      name: "ALDI",
+      // Hardcoded to the local ALDI logo file in this directory.
+      logoUrl: "aldi-logo.png"
+    },
+
+    // ---- HEADER TEXT ----
+    subtitle: "Coupon Booklet · Heti akciók",
+    headline: "Spóroljon most!",
+    userName: "",                              // e.g. "Tejes Tibor" for personalised booklet, empty to hide
+    userGreeting: "Személyre szabott ajánlatok: ",
+
+    // ---- PERIOD ----
+    validFrom: "2026.04.23",
+    validTo:   "2026.04.30",
+
+    // ---- HEADLINE CTA ----
+    avgDiscount: 35,                           // integer percent
+    avgDiscountLabel: "Átlagos kedvezmény",
+
+    // ---- RIBBON ----
+    ribbonLeft:  "★ 10 exkluzív kupon — egy oldalon ★",
+    ribbonRight: "Vágja ki · Scanneljen · Spóroljon",
+
+    // ---- FOOTER ----
+    issueLabel:  "nagya.app · Kupon füzet · 2026 április",
+    footerNote:  "Max. 1 db / vásárlás / kupon · A képek illusztrációk",
+    pageIndicator: "1 / 1",
+
+    // ---- COUPONS (max 10) ----
+    // Each coupon supports the following fields:
+    //   sku            — product identifier (used for image fallback path)
+    //   title          — product name
+    //   category       — display category
+    //   imageUrl       — explicit image URL (falls back to images/<sku>.webp)
+    //   oldPrice       — original price (HUF integer)
+    //   newPrice       — discounted price (HUF integer)
+    //   discount       — percent (if omitted, computed from old/new)
+    //   code           — coupon / barcode code (any Code128-compatible string)
+    //   validTo        — short expiry label, e.g. "04.30-ig"
+    //   limit          — per-purchase limit label, e.g. "Max. 1 db"
+    coupons: [
+      { sku: "EDE-002", title: "Tejcsokoládé 100g",               category: "Édesség",          oldPrice: 749,  newPrice: 499,  code: "NAGYAEDE002-4821", validTo: "04.30-ig", limit: "Max. 1 db" },
+      { sku: "ENF-003", title: "Csavarhúzó készlet 6 részes",     category: "Egyéb non-food",   oldPrice: 4290, newPrice: 2990, code: "NAGYAENF003-7134", validTo: "04.30-ig", limit: "Max. 1 db" },
+      { sku: "GF-008",  title: "Bacon szelet 200g",               category: "Grillezős food",   oldPrice: 1199, newPrice: 849,  code: "NAGYAGF008-5627",  validTo: "04.30-ig", limit: "Max. 2 db" },
+      { sku: "GNF-004", title: "Grillgyújtó folyadék 0.5L",       category: "Grillezős non-food", oldPrice: 1099, newPrice: 799, code: "NAGYAGNF004-9182", validTo: "04.30-ig", limit: "Max. 1 db" },
+      { sku: "PEK-004", title: "Hamburger zsemle 4 db",           category: "Pékáru",           oldPrice: 399,  newPrice: 279,  code: "NAGYAPEK004-3408", validTo: "04.30-ig", limit: "Max. 3 db" },
+      { sku: "SZE-006", title: "Fehér bor száraz 0.75L",          category: "Szeszes ital",     oldPrice: 1890, newPrice: 1390, code: "NAGYASZE006-6271", validTo: "04.30-ig", limit: "Max. 2 db" },
+      { sku: "TEJ-001", title: "Tej 2.8% 1 liter",                category: "Tejtermék",        oldPrice: 429,  newPrice: 329,  code: "NAGYATEJ001-1856", validTo: "04.30-ig", limit: "Max. 5 db" },
+      { sku: "TES-002", title: "Penne rigate 500g",               category: "Tésztaféle",       oldPrice: 439,  newPrice: 289,  code: "NAGYATES002-8443", validTo: "04.30-ig", limit: "Max. 3 db" },
+      { sku: "UDI-007", title: "Multivitamin gyümölcslé 1L",      category: "Üdítő ital",       oldPrice: 649,  newPrice: 449,  code: "NAGYAUDI007-2915", validTo: "04.30-ig", limit: "Max. 2 db" },
+      { sku: "ZOL-006", title: "Cukkini 1 db",                    category: "Zöldség",          oldPrice: 329,  newPrice: 229,  code: "NAGYAZOL006-7301", validTo: "04.30-ig", limit: "Max. 5 db" }
+    ]
+  };
+
+  // ----- Hardcoded ALDI logo (SVG data URI, replicating the official badge) -----
+  window.__DEFAULT_LOGO__ = 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <!-- Outer orange frame -->
+    <rect width="100" height="100" fill="#e87818" rx="4"/>
+    <!-- Dark blue inner badge -->
+    <rect x="5" y="5" width="90" height="90" fill="#1e3a7b" rx="2"/>
+    <!-- Three diagonal white stripes (ALDI mark) -->
+    <path d="M 17 60 L 30 18 L 38 18 L 25 60 Z" fill="white"/>
+    <path d="M 27 60 L 40 18 L 48 18 L 35 60 Z" fill="white"/>
+    <path d="M 37 60 L 50 18 L 58 18 L 45 60 Z" fill="white"/>
+    <!-- Stair-stepped E on the right -->
+    <path d="M 48 60 L 52 47 L 76 47 L 74 54 L 58 54 L 57 57 L 72 57 L 70 60 Z" fill="white"/>
+    <path d="M 53 43 L 57 30 L 76 30 L 74 37 L 61 37 L 59 43 Z" fill="white"/>
+    <path d="M 58 26 L 62 13 L 76 13 L 74 20 L 66 20 L 63 26 Z" fill="white"/>
+    <!-- White plate with ALDI wordmark -->
+    <rect x="15" y="68" width="70" height="20" fill="white" rx="1"/>
+    <text x="50" y="84" text-anchor="middle" font-family="Arial Black, Arial, sans-serif"
+          font-size="15" font-weight="900" fill="#1e3a7b" letter-spacing="1">ALDI</text>
+  </svg>`);
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script>
+  const HUF = new Intl.NumberFormat('hu-HU');
+  const cfg = window.__BOOKLET_CONFIG__;
+
+  // Derive computed fields
+  cfg.coupons = cfg.coupons.slice(0, 10).map(c => {
+    const discount = c.discount ?? Math.round((1 - c.newPrice / c.oldPrice) * 100);
+    return {
+      ...c,
+      discount,
+      imageUrl: c.imageUrl || `images/${c.sku}.webp`,
+      discountBadge: `-${discount}%`,
+      oldPriceLabel: HUF.format(c.oldPrice) + ' Ft',
+      newPriceLabel: HUF.format(c.newPrice) + ' Ft',
+      validToLabel: c.validTo,
+    };
+  });
+
+  // Global text placeholders
+  const globals = {
+    subtitle: cfg.subtitle,
+    headline: cfg.headline,
+    userLine: cfg.userName ? (cfg.userGreeting + cfg.userName) : '',
+    avgDiscountLine: `-${cfg.avgDiscount}%`,
+    avgDiscountLabel: cfg.avgDiscountLabel,
+    validPeriod: `${cfg.validFrom}\n— ${cfg.validTo}`,
+    ribbonLeft: cfg.ribbonLeft,
+    ribbonRight: cfg.ribbonRight,
+    issueLabel: cfg.issueLabel,
+    footerNote: cfg.footerNote,
+    pageIndicator: cfg.pageIndicator,
+  };
+
+  // Logo
+  document.getElementById('logo-img').src = cfg.brand.logoUrl || window.__DEFAULT_LOGO__;
+
+  // Fill globals
+  document.querySelectorAll('[data-var]').forEach(el => {
+    const key = el.dataset.var;
+    if (key in globals) {
+      // Newline-preserving for period
+      el.innerHTML = String(globals[key]).replace(/\n/g, '<br>');
+      if (!globals[key]) el.style.display = 'none';
+    }
+  });
+
+  // Render coupons from template
+  const tpl = document.getElementById('coupon-tpl');
+  const grid = document.getElementById('grid');
+  cfg.coupons.forEach(c => {
+    const node = tpl.content.cloneNode(true);
+    node.querySelectorAll('[data-var]').forEach(el => {
+      const key = el.dataset.var;
+      if (key in c) el.textContent = c[key];
+    });
+    node.querySelectorAll('[data-var-attr]').forEach(el => {
+      el.dataset.varAttr.split(';').forEach(pair => {
+        const [attr, key] = pair.split(':');
+        if (c[key] !== undefined) el.setAttribute(attr, c[key]);
+      });
+    });
+    grid.appendChild(node);
+  });
+
+  // Render Code128 barcodes
+  document.querySelectorAll('svg.bc').forEach(svg => {
+    JsBarcode(svg, svg.getAttribute('data-code'), {
+      format: 'CODE128',
+      width: 0.9,
+      height: 22,
+      displayValue: false,
+      margin: 0,
+      background: 'transparent',
+      lineColor: '#000',
+    });
+  });
+
+  window.__ready = true;
+</script>
+</body>
+</html>
