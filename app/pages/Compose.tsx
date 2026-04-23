@@ -29,7 +29,6 @@ import {
   type User,
   type WeatherSnapshot,
   createBundles,
-  currentSeason,
   detectConflicts,
   rankProductsForCampaign,
   scoreFor,
@@ -142,11 +141,17 @@ export function Compose() {
 
   // -------------------------------------------------------------------------
   // Per-user personalization preview
-  // Each user is ranked against the FULL product catalog (not just the
-  // aggregate "javasolt termékek" list), and personalization signals
-  // (fav +, avoid -) are amplified via personalBoost so the user's
-  // favorite_category dominates unless an item is very urgent. Slice
-  // follows the 1-10 productCount slider.
+  //
+  // Scoring explicitly uses WEEKLY (balanced) weights — NOT the admin's
+  // selected campaign type — so the user's favorite_category always wins
+  // against a slightly more urgent non-favorite item. The aggregate list
+  // above still honors the admin's campaign choice; this view answers a
+  // different question: "if I sent a personalized email to each user
+  // right now, which 10 items from the FULL catalog would rank highest
+  // for them specifically?"
+  //
+  // Numbers: fav 40 × weeklyWeight(1.0) × personalBoost(2.5) = 100,
+  // which beats the biggest urgency signal (1-day expiry = 80 in weekly).
   // -------------------------------------------------------------------------
   const perUser = useMemo(() => {
     if (!users || !products) return [];
@@ -159,7 +164,7 @@ export function Compose() {
             user,
             tags: tags[product.sku],
             weather: weatherSnap,
-            campaignType,
+            campaignType: 'weekly',
             personalBoost: 2.5,
           }),
         }))
@@ -168,7 +173,7 @@ export function Compose() {
         .slice(0, productCount);
       return { user, items: ranked };
     });
-  }, [users, products, tags, weatherSnap, campaignType, productCount]);
+  }, [users, products, tags, weatherSnap, productCount]);
 
   // -------------------------------------------------------------------------
   // Send handler
@@ -505,59 +510,57 @@ export function Compose() {
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Minden user a teljes katalógusból kapja a saját top {productCount}-ét. A scoring
-          felerősíti a kedvenc kategóriát (personalBoost 2.5×), így a user preferenciája
-          dominálja a rangsort, amíg nincs extrém urgens lejárat.
+          Minden user a <strong>teljes 76 terméktől</strong> kapja a saját top {productCount}-ét.
+          A per-user scoring szándékosan a kiegyensúlyozott <strong>weekly</strong> súlyokat
+          használja (nem az admin-választott kampányt), és 2.5×-re emeli a favorite / avoid
+          jelet — így a user preferenciája mindig nyer az urgens, nem-kedvenc item-ekkel szemben.
         </p>
 
-        {/* Scoring-rendszer logika-tábla */}
+        {/* Scoring-rendszer logika-tábla (per-user: weekly weights) */}
         <Card className="bg-muted/30 border-dashed">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Scoring rendszer — jelenlegi kampány: {CAMPAIGN_META[campaignType].label}
+              Per-user scoring — weekly balanced + personalBoost 2.5×
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-xs space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">kedvenc kategória (user fav)</span>
-                <span className="font-mono tabular-nums">+40 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.8' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '0.6' : '1.0'} × 2.5</span>
+                <span className="text-muted-foreground">kedvenc kategória (fav)</span>
+                <span className="font-mono tabular-nums">+40 × 1.0 × 2.5 = <strong>+100</strong></span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">kerüli (least purchased)</span>
-                <span className="font-mono tabular-nums text-destructive">-25 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '1.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '0.6' : '1.0'} × 2.5</span>
+                <span className="font-mono tabular-nums text-destructive">-25 × 1.0 × 2.5 = <strong>-62</strong></span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">lejárat 1/2/3/7/30 nap</span>
-                <span className="font-mono tabular-nums">+80/60/40/20/10 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '3.0' : campaignType === 'weather' ? '0.3' : campaignType === 'seasonal' ? '0.2' : '1.0'}</span>
+                <span className="font-mono tabular-nums">+80 / +60 / +40 / +20 / +10</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">időjárás-match kategória</span>
-                <span className="font-mono tabular-nums">+30 × {campaignType === 'weekly' ? '0.5' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '3.0' : campaignType === 'seasonal' ? '0.5' : '1.0'}</span>
+                <span className="text-muted-foreground">időjárás-match</span>
+                <span className="font-mono tabular-nums">+30 × 0.5 = +15</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">szezon-match</span>
-                <span className="font-mono tabular-nums">+25 × {campaignType === 'weekly' ? '0.3' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '3.0' : '1.0'}</span>
+                <span className="text-muted-foreground">szezon-match (kategória)</span>
+                <span className="font-mono tabular-nums">+25 × 0.3 = +7</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">AI tag · occasion</span>
-                <span className="font-mono tabular-nums">+15 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '2.0' : '1.0'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">AI tag · season match</span>
-                <span className="font-mono tabular-nums">+20 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.0' : campaignType === 'weather' ? '0.5' : campaignType === 'seasonal' ? '2.5' : '1.0'}</span>
+                <span className="text-muted-foreground">AI tag · occasion / season</span>
+                <span className="font-mono tabular-nums">+15 / +20 (ha van tag)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">hot mover (sold7d/stock ≥ 0.5)</span>
-                <span className="font-mono tabular-nums">+10 × {campaignType === 'weekly' ? '1.0' : campaignType === 'expiry' ? '0.3' : campaignType === 'weather' ? '1.0' : campaignType === 'seasonal' ? '1.0' : '1.0'}</span>
+                <span className="font-mono tabular-nums">+10</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">1-napos lejárat vs. fav</span>
+                <span className="font-mono tabular-nums">80 &lt; 100 → <strong>fav nyer</strong></span>
               </div>
             </div>
             <div className="pt-1.5 border-t border-border/60 text-muted-foreground">
-              <span className="font-medium">Hard filter:</span>{' '}
-              {campaignType === 'expiry' && 'csak ≤14 napon belül lejáró termékek'}
-              {campaignType === 'weather' && 'csak az aktuális hőmérsékletbe tartozó kategóriák (kivétel: user fav)'}
-              {campaignType === 'seasonal' && `csak ${currentSeason()} kategóriák (kivétel: user fav)`}
-              {(campaignType === 'weekly' || campaignType === 'custom') && 'nincs'}
+              <span className="font-medium">Hard filter:</span> nincs — minden termék versenyez a user top {productCount}-ért,
+              a score dönt.
             </div>
           </CardContent>
         </Card>
