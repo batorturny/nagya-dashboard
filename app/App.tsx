@@ -1,28 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  CircleDashed,
-  Heart,
-  Mail,
-  Package,
-  Sparkles,
-  ThumbsDown,
-} from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-
-// ---------------------------------------------------------------------------
-// Types (mirror the live /api/users + /api/products response)
-// ---------------------------------------------------------------------------
+import aldiLogo from '@/assets/aldi-it-logo.png';
 
 type Product = {
   id: number;
@@ -51,184 +28,134 @@ type ApiEnvelope<T> = {
   categories?: string[];
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const HUF = new Intl.NumberFormat('hu-HU');
-const LOW_STOCK = 20;
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(path);
-  if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
 
-function initials(name: string): string {
-  return name
-    .split(' ')
-    .map((s) => s[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+function daysLeft(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(dateStr);
+  exp.setHours(0, 0, 0, 0);
+  return Math.round((exp.getTime() - today.getTime()) / 86400000);
 }
 
-const phases = [
-  { num: '01', title: 'Termék + inventory scan', desc: 'SKU, lejárat, stock · ≤3 nap flag', icon: Package },
-  { num: '02', title: 'AI tag + párosítás', desc: 'Gemini Flash tag, complementary/substitute', icon: Sparkles },
-  { num: '03', title: 'Composer + time szezon', desc: 'Open-Meteo, 1-10 termék email, preview', icon: AlertTriangle },
-  { num: '04', title: 'Küldés + PDF kupon', desc: 'Resend, Code128 vonalkód, per user', icon: Mail },
-] as const;
-
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
+function initials(name: string): string {
+  return name.split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase();
+}
 
 export function App() {
   const [users, setUsers] = useState<User[] | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetchJson<ApiEnvelope<User>>('/api/users'),
       fetchJson<ApiEnvelope<Product>>('/api/products'),
-    ])
-      .then(([u, p]) => {
-        setUsers(u.data);
-        setProducts(p.data);
-        setCategories(p.categories ?? []);
-      })
-      .catch((e: Error) => setError(e.message));
+    ]).then(([u, p]) => {
+      setUsers(u.data);
+      setProducts(p.data);
+      setCategories(p.categories ?? []);
+    });
   }, []);
 
   const visibleProducts = useMemo(() => {
     if (!products) return [];
-    return activeCategory === 'all'
+    const filtered = activeCategory === 'all'
       ? products
       : products.filter((p) => p.category === activeCategory);
+    return [...filtered].sort((a, b) => daysLeft(a.expiration_date) - daysLeft(b.expiration_date));
   }, [products, activeCategory]);
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <div className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-        {/* Header */}
-        <header className="flex items-start justify-between gap-6 border-b border-border pb-6">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">nagya.app · Smart Newsletter</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Weather-aware, personalized product promos · Resend delivery · PDF coupons
-            </p>
+    <div className="min-h-screen bg-[#f5f5f5] text-gray-900">
+
+      {/* Navbar */}
+      <nav className="bg-[#003865] text-white">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src={aldiLogo}
+              alt="ALDI"
+              className="h-11 w-11 rounded object-cover"
+            />
+            <div>
+              <div className="text-[11px] uppercase tracking-widest text-white/60 font-medium">
+                ALDI International IT Services
+              </div>
+              <div className="text-lg font-bold leading-tight">
+                Promóciós hírlevél
+              </div>
+            </div>
           </div>
-          <Button size="sm" variant="outline" asChild>
-            <a href="https://github.com/batorturny/nagya-dashboard" target="_blank" rel="noreferrer">
-              GitHub <ArrowRight />
-            </a>
-          </Button>
-        </header>
+          <button className="text-sm border border-white/30 rounded px-4 py-1.5 hover:bg-white/10 transition-colors">
+            Hírlevél összeállítása
+          </button>
+        </div>
+        <div className="h-[3px] bg-[#E2450C]" />
+      </nav>
 
-        {/* Phase stepper */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {phases.map((p) => (
-            <Card key={p.num} className="relative">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <p.icon className="text-muted-foreground" />
-                  <span className="text-[10px] font-mono text-muted-foreground tracking-widest">
-                    PHASE {p.num}
-                  </span>
-                </div>
-                <CardTitle className="mt-2 text-base">{p.title}</CardTitle>
-                <CardDescription className="text-xs">{p.desc}</CardDescription>
-              </CardHeader>
-            </Card>
-          ))}
-        </section>
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-10">
 
-        {error && (
-          <Card className="border-destructive">
-            <CardHeader>
-              <CardTitle className="text-destructive text-base">API error</CardTitle>
-              <CardDescription>{error}</CardDescription>
-            </CardHeader>
-          </Card>
-        )}
-
-        {/* Users */}
-        <section className="space-y-4">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-xl font-semibold tracking-tight">Userek</h2>
-            <span className="text-xs font-mono text-muted-foreground">
-              /api/users {users ? `· ${users.length}` : ''}
-            </span>
-          </div>
-
-          {!users ? (
-            <LoadingRow />
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* Customers */}
+        {users && (
+          <section>
+            <h2 className="text-base font-semibold text-gray-500 uppercase tracking-wider mb-4">
+              Vásárlók
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {users.map((u) => (
-                <Card key={u.id}>
-                  <CardHeader className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                        {initials(u.name)}
-                      </div>
-                      <div className="min-w-0">
-                        <CardTitle className="text-sm">{u.name}</CardTitle>
-                        <CardDescription className="text-xs font-mono truncate">
-                          {u.email}
-                        </CardDescription>
-                      </div>
+                <div key={u.id} className="bg-white rounded border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-8 w-8 rounded-full bg-[#003865] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                      {initials(u.name)}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="success" className="gap-1">
-                        <Heart className="h-3 w-3" /> {u.favorite_category}
-                      </Badge>
-                      <Badge variant="destructive" className="gap-1 bg-destructive/10 text-destructive hover:bg-destructive/20">
-                        <ThumbsDown className="h-3 w-3" /> {u.least_purchased_category}
-                      </Badge>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold truncate">{u.name}</div>
+                      <div className="text-xs text-gray-400 truncate">{u.email}</div>
                     </div>
-                  </CardHeader>
-                </Card>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-500">
+                      Kedvenc: <span className="text-[#003865] font-medium">{u.favorite_category}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Kerüli: <span className="text-gray-400">{u.least_purchased_category}</span>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        )}
 
-        {/* Products */}
-        <section className="space-y-4">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-xl font-semibold tracking-tight">Termékek</h2>
-            <span className="text-xs font-mono text-muted-foreground">
-              /api/products {products ? `· ${visibleProducts.length} / ${products.length}` : ''}
-            </span>
+        {/* Category nav */}
+        <section className="space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-500 uppercase tracking-wider">
+              Termékek {visibleProducts.length > 0 && <span className="text-gray-400 font-normal normal-case tracking-normal text-sm">({visibleProducts.length} db)</span>}
+            </h2>
           </div>
 
           {categories.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              <CategoryChip
-                label="Összes"
-                active={activeCategory === 'all'}
-                onClick={() => setActiveCategory('all')}
-              />
+            <div className="flex flex-wrap gap-0 border-b border-gray-200">
+              <CategoryTab label="Összes" active={activeCategory === 'all'} onClick={() => setActiveCategory('all')} />
               {categories.map((c) => (
-                <CategoryChip
-                  key={c}
-                  label={c}
-                  active={activeCategory === c}
-                  onClick={() => setActiveCategory(c)}
-                />
+                <CategoryTab key={c} label={c} active={activeCategory === c} onClick={() => setActiveCategory(c)} />
               ))}
             </div>
           )}
 
           {!products ? (
-            <LoadingRow />
+            <div className="text-sm text-gray-400 py-8 text-center">Betöltés…</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {visibleProducts.map((p) => (
                 <ProductCard key={p.sku} product={p} />
               ))}
@@ -236,41 +163,29 @@ export function App() {
           )}
         </section>
 
-        <footer className="text-xs text-muted-foreground border-t border-border pt-4 flex items-center justify-between">
-          <span>Phase 1 foundation · React 18 + shadcn/ui + Hono Worker</span>
-          <span>Snapshot 2026-04-23</span>
-        </footer>
       </div>
-    </main>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Subcomponents
-// ---------------------------------------------------------------------------
-
-function LoadingRow() {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <CircleDashed className="animate-spin" /> Betöltés…
+      {/* Footer */}
+      <footer className="mt-16 border-t border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between text-xs text-gray-400">
+          <span>© 2026 ALDI International IT Services Kft.</span>
+          <span>Alacsony árak. Magas minőség.</span>
         </div>
-      </CardContent>
-    </Card>
+      </footer>
+    </div>
   );
 }
 
-function CategoryChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function CategoryTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={
-        'rounded-full border px-3 py-1 text-xs font-medium transition-colors ' +
+        'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ' +
         (active
-          ? 'bg-primary text-primary-foreground border-primary'
-          : 'border-border bg-background hover:bg-accent hover:text-accent-foreground')
+          ? 'border-[#E2450C] text-[#003865]'
+          : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300')
       }
     >
       {label}
@@ -279,51 +194,65 @@ function CategoryChip({ label, active, onClick }: { label: string; active: boole
 }
 
 function ProductCard({ product: p }: { product: Product }) {
-  const low = p.stock.current < LOW_STOCK;
+  const days = daysLeft(p.expiration_date);
+
+  const discount =
+    days <= 1 ? 50 :
+    days === 2 ? 20 :
+    days === 3 ? null : null;
+
+  const discountedPrice = discount
+    ? Math.round(p.price.value * (1 - discount / 100))
+    : null;
+
+  const urgencyLabel =
+    days <= 0 ? { text: 'Lejárt', cls: 'bg-gray-500 text-white' } :
+    days === 1 ? { text: 'Ma az utolsó nap', cls: 'bg-[#E2450C] text-white' } :
+    days === 2 ? { text: 'Holnap lejár', cls: 'bg-[#E2450C] text-white' } :
+    days === 3 ? { text: 'Hamarosan lejár', cls: 'bg-[#003865] text-white' } :
+    null;
+
   return (
-    <Card className="overflow-hidden flex flex-col">
-      <div className="aspect-square bg-muted/30 overflow-hidden border-b border-border">
+    <div className="bg-white rounded border border-gray-200 flex flex-col overflow-hidden hover:shadow-md transition-shadow">
+      <div className="relative aspect-square bg-gray-50">
         <img
           src={`/images/${p.sku}.webp`}
           alt={p.title}
           loading="lazy"
           className="h-full w-full object-cover"
-          onError={(e) => {
-            // Replace broken image with a subtle placeholder
-            const target = e.currentTarget;
-            target.style.display = 'none';
-            const parent = target.parentElement;
-            if (parent && !parent.querySelector('[data-fallback]')) {
-              const span = document.createElement('span');
-              span.dataset.fallback = 'true';
-              span.className = 'h-full w-full flex items-center justify-center text-4xl text-muted-foreground/40';
-              span.textContent = '📦';
-              parent.appendChild(span);
-            }
-          }}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
-      </div>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-sm leading-snug">{p.title}</CardTitle>
-          <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-            {p.sku}
+        {urgencyLabel && (
+          <span className={`absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded ${urgencyLabel.cls}`}>
+            {urgencyLabel.text}
           </span>
-        </div>
-        <Badge variant="outline" className="w-fit">
-          {p.category}
-        </Badge>
-      </CardHeader>
-      <CardContent className="pt-0 flex-1 flex flex-col justify-end gap-2">
-        <p className="text-xs text-muted-foreground line-clamp-2">{p.description}</p>
-        <div className="flex items-center justify-between">
-          <span className="text-base font-semibold tabular-nums">{HUF.format(p.price.value)} Ft</span>
-          <Badge variant={low ? 'warning' : 'secondary'}>
-            {low ? '⚠ ' : ''}
+        )}
+        {discount && (
+          <span className="absolute top-2 right-2 bg-[#E2450C] text-white text-xs font-bold px-2 py-0.5 rounded">
+            -{discount}%
+          </span>
+        )}
+      </div>
+
+      <div className="p-3 flex flex-col flex-1 gap-1">
+        <div className="text-[11px] text-gray-400">{p.category}</div>
+        <div className="text-sm font-semibold leading-snug line-clamp-2">{p.title}</div>
+        <div className="mt-auto pt-2 flex items-end justify-between gap-1">
+          <div>
+            {discountedPrice ? (
+              <>
+                <div className="text-[11px] text-gray-400 line-through">{HUF.format(p.price.value)} Ft</div>
+                <div className="text-base font-bold text-[#E2450C]">{HUF.format(discountedPrice)} Ft</div>
+              </>
+            ) : (
+              <div className="text-base font-bold text-gray-900">{HUF.format(p.price.value)} Ft</div>
+            )}
+          </div>
+          <div className="text-[11px] text-gray-400 text-right">
             {p.stock.current} db
-          </Badge>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
